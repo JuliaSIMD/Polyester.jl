@@ -5,7 +5,6 @@ function (b::BatchClosure{F,A,B})(p::Ptr{UInt}) where {F,A,B}
     (offset, args) = ThreadingUtilities.load(p, A, 1)
     (offset, start) = ThreadingUtilities.load(p, UInt, offset)
     (offset, stop ) = ThreadingUtilities.load(p, UInt, offset)
-
     b.f(args, start+one(UInt), stop)
     B && free_local_threads!()
     nothing
@@ -80,18 +79,12 @@ end
             tid += tz
             tm >>>= tz
             launch_batched_thread!(cfunc, tid, argtup, start, stop)
+            # @show start, stop
             start = stop
             i == nthread && break
         end
-        f!(argtup, start, ulen)
-    end
-    gcpr = Expr(:gc_preserve, block, :cfunc)
-    argt = Expr(:tuple)
-    for k ∈ 1:K
-        add_var!(q, argt, gcpr, args[k], :args, :gcp, k)
-    end
-    push!(q.args, :(argtup = $argt), :(cfunc = batch_closure(f!, argtup, Val{false}())), gcpr)
-    final = quote
+        # @show start, ulen
+        f!(map(dereference, argtup), start, ulen)
         tm = mask(threads)
         tid = 0x00000000
         while true
@@ -106,7 +99,13 @@ end
         free_threads!(torelease)
         nothing
     end
-    push!(q.args, final)
+    gcpr = Expr(:gc_preserve, block, :cfunc)
+    argt = Expr(:tuple)
+    for k ∈ 1:K
+        add_var!(q, argt, gcpr, args[k], :args, :gcp, k)
+    end
+    push!(q.args, :(argtup = $argt), :(cfunc = batch_closure(f!, argtup, Val{false}())), gcpr)
+    push!(q.args, nothing)
     q
 end
 @generated function _batch_reserve(
@@ -151,15 +150,7 @@ end
             start = stop
             i == nthread && break
         end
-        f!(argtup, start, ulen)
-    end
-    gcpr = Expr(:gc_preserve, block, :cfunc)
-    argt = Expr(:tuple)
-    for k ∈ 1:K
-        add_var!(q, argt, gcpr, args[k], :args, :gcp, k)
-    end
-    push!(q.args, :(argtup = $argt), :(cfunc = batch_closure(f!, argtup, Val{true}())), gcpr)
-    final = quote
+        f!(map(dereference, argtup), start, ulen)
         tid = 0x00000000
         while true
             VectorizationBase.assume(wait_mask ≠ zero(wait_mask))
@@ -171,7 +162,13 @@ end
         end
         nothing
     end
-    push!(q.args, final)
+    gcpr = Expr(:gc_preserve, block, :cfunc)
+    argt = Expr(:tuple)
+    for k ∈ 1:K
+        add_var!(q, argt, gcpr, args[k], :args, :gcp, k)
+    end
+    push!(q.args, :(argtup = $argt), :(cfunc = batch_closure(f!, argtup, Val{true}())), gcpr)
+    push!(q.args, nothing)
     q
 end
 

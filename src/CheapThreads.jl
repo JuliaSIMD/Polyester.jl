@@ -2,7 +2,7 @@ module CheapThreads
 
 using ThreadingUtilities, VectorizationBase
 using VectorizationBase: num_threads, cache_linesize
-using StrideArraysCore: object_and_preserve
+using StrideArraysCore: object_and_preserve, dereference
 using Requires
 
 export batch, num_threads
