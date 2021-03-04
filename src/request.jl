@@ -9,11 +9,11 @@ worker_pointer() = Base.unsafe_convert(worker_pointer_type(), pointer_from_objre
 
 function reserved(id)
     p = Base.unsafe_convert(worker_pointer_type(), STATES)
-    vload(p, VectorizationBase.lazymul(cache_linesize(), id))
+    __vload(p, VectorizationBase.lazymul(cache_linesize(), id), False(), register_size())
 end
 function reserve_threads!(id, reserve)
     p = Base.unsafe_convert(worker_pointer_type(), STATES)
-    vstore!(p, VectorizationBase.lazymul(cache_linesize(), id), reserve)
+    __vstore!(p, VectorizationBase.lazymul(cache_linesize(), id), reserve, False(), False(), False(), register_size())
     nothing
 end
 function free_threads!(freed_threads)
