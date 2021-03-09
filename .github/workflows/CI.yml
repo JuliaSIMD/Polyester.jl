@@ -15,6 +15,8 @@ jobs:
           - 'nightly'
         os:
           - ubuntu-latest
+        threads:
+          - '5'
         arch:
           - x64
     steps:
@@ -35,6 +37,8 @@ jobs:
             ${{ runner.os }}-
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
+        env:
+          JULIA_NUM_THREADS: ${{ matrix.threads }}
       - uses: julia-actions/julia-processcoverage@v1
       - uses: codecov/codecov-action@v1
         with:
