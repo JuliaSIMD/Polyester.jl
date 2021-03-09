@@ -16,7 +16,7 @@ include("unsignediterator.jl")
 reset_workers!() = WORKERS[] = UInt128((1 << (Threads.nthreads() - 1)) - 1)
 function __init__()
     reset_workers!()
-    resize!(STATES, num_threads() * cache_linesize())
+    resize!(STATES, min((Sys.CPU_THREADS)::Int, Threads.nthreads()) * cache_linesize())
     STATES .= 0x00
     @require ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210" include("forwarddiff.jl")
 end
