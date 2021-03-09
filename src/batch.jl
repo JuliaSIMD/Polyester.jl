@@ -2,7 +2,7 @@ struct BatchClosure{F, A, B}
     f::F
 end
 function (b::BatchClosure{F,A,B})(p::Ptr{UInt}) where {F,A,B}
-    (offset, args) = ThreadingUtilities.load(p, A, 1)
+    (offset, args) = ThreadingUtilities.load(p, A, 2*sizeof(UInt))
     (offset, start) = ThreadingUtilities.load(p, UInt, offset)
     (offset, stop ) = ThreadingUtilities.load(p, UInt, offset)
     b.f(args, start+one(UInt), stop)
@@ -16,7 +16,7 @@ end
 end
 
 @inline function setup_batch!(p::Ptr{UInt}, fptr::Ptr{Cvoid}, argtup, start::UInt, stop::UInt)
-    offset = ThreadingUtilities.store!(p, fptr, 0)
+    offset = ThreadingUtilities.store!(p, fptr, sizeof(UInt))
     offset = ThreadingUtilities.store!(p, argtup, offset)
     offset = ThreadingUtilities.store!(p, start, offset)
     offset = ThreadingUtilities.store!(p, stop, offset)
@@ -176,8 +176,7 @@ end
 function batch(
     f!::F, (len, nbatches)::Tuple{Vararg{Integer,2}}, args::Vararg{Any,K}
 ) where {F,K}
-    myid = Base.Threads.threadid()
-    threads, torelease = request_threads(myid, nbatches - one(nbatches))
+    threads, torelease = request_threads(Base.Threads.threadid(), nbatches - one(nbatches))
     nthread = length(threads)
     ulen = len % UInt
     if iszero(nthread)
@@ -194,9 +193,9 @@ end
 function batch(
     f!::F, (len, nbatches, reserve_per_worker)::Tuple{Vararg{Integer,3}}, args::Vararg{Any,K}
 ) where {F,K}
-    myid = Base.Threads.threadid()
+
     requested_threads = reserve_per_worker*nbatches
-    threads, torelease = request_threads(myid, requested_threads - one(nbatches))
+    threads, torelease = request_threads(Base.Threads.threadid(), requested_threads - one(nbatches))
     nthread = length(threads)
     ulen = len % UInt
     if iszero(nthread)
