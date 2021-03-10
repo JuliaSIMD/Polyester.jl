@@ -1,8 +1,7 @@
 using CheapThreads, Aqua
 using Test
 
-@testset "CheapThreads.jl" begin
-    Aqua.test_all(CheapThreads)
+@testset "Range Map" begin
     function rangemap!(f::F, allargs, start, stop) where {F}
         dest = first(allargs)
         args = Base.tail(allargs)
@@ -43,3 +42,5 @@ using Test
 
     
 end
+Aqua.test_all(CheapThreads)
+
