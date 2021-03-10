@@ -1,4 +1,4 @@
-using CheapThreads, Aqua
+using CheapThreads, Aqua, ForwardDiff
 using Test
 
 @testset "Range Map" begin
@@ -39,8 +39,17 @@ using Test
     #     sum(@view(x[1,1:end]))
     # end
     # slow_cheap(1000, "9")
-
-    
 end
+
+@testset "ForwardDiff" begin
+    x = randn(80);
+    dxref = similar(x);
+    dx = similar(x);
+    f(x) = -sum(sum ∘ sincos, x)
+    CheapThreads.threaded_gradient!(f, dx, x, ForwardDiff.Chunk(8))
+    ForwardDiff.gradient!(dxref, f, x, ForwardDiff.GradientConfig(f, x, ForwardDiff.Chunk(8), nothing))
+    @test dx == dxref
+end
+
 Aqua.test_all(CheapThreads)
 
