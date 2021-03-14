@@ -1,3 +1,4 @@
+println("Starting tests...")
 using CheapThreads, Aqua, ForwardDiff
 using Test
 
@@ -21,6 +22,7 @@ using Test
 
     x = rand(1024); y = rand(length(x)); z = similar(x);
     foo(x,y) = exp(-0.5abs2(x-y))
+    println("Running `tmap!` test...")
     @test tmap!(foo, z, x, y) ≈ foo.(x, y)
 
     # TODO: why does this crash Julia?
@@ -46,10 +48,12 @@ end
     dxref = similar(x);
     dx = similar(x);
     f(x) = -sum(sum ∘ sincos, x)
+    println("Running threaded ForwardDiff test...")
     CheapThreads.threaded_gradient!(f, dx, x, ForwardDiff.Chunk(8))
     ForwardDiff.gradient!(dxref, f, x, ForwardDiff.GradientConfig(f, x, ForwardDiff.Chunk(8), nothing))
     @test dx == dxref
 end
 
+println("Package tests complete. Running `Aqua` checks.")
 Aqua.test_all(CheapThreads)
 
