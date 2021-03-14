@@ -6,11 +6,11 @@ DocMeta.setdocmeta!(CheapThreads, :DocTestSetup, :(using CheapThreads); recursiv
 makedocs(;
     modules=[CheapThreads],
     authors="Chris Elrod <elrodc@gmail.com> and contributors",
-    repo="https://github.com/chriselrod/CheapThreads.jl/blob/{commit}{path}#{line}",
+    repo="https://github.com/JuliaSIMD/CheapThreads.jl/blob/{commit}{path}#{line}",
     sitename="CheapThreads.jl",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://chriselrod.github.io/CheapThreads.jl",
+        canonical="https://JuliaSIMD.github.io/CheapThreads.jl",
         assets=String[],
     ),
     pages=[
@@ -19,5 +19,5 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/chriselrod/CheapThreads.jl",
+    repo="github.com/JuliaSIMD/CheapThreads.jl",
 )
