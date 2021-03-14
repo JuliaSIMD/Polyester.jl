@@ -1,4 +1,4 @@
-println("Starting tests...")
+println("Starting tests with $(Threads.nthreads()) threads out of `Sys.CPU_THREADS = $(Sys.CPU_THREADS)`...")
 using CheapThreads, Aqua, ForwardDiff
 using Test
 
