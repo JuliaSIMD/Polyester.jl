@@ -1,7 +1,7 @@
 name = "CheapThreads"
 uuid = "b630d9fa-e28e-4980-896d-83ce5e2106b2"
 authors = ["Chris Elrod <elrodc@gmail.com> and contributors"]
-version = "0.1.1"
+version = "0.1.2"
 
 [deps]
 Requires = "ae029012-a4dd-5104-9daa-d747884805df"
@@ -12,7 +12,7 @@ VectorizationBase = "3d5dd08c-fd9d-11e8-17fa-ed2836048c2f"
 [compat]
 Requires = "1"
 StrideArraysCore = "0.1.2"
-ThreadingUtilities = "0.3"
+ThreadingUtilities = "0.4"
 VectorizationBase = "0.18.7,0.19"
 julia = "1.5"
 

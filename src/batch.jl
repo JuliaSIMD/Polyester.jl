@@ -23,20 +23,9 @@ end
     nothing
 end
 @inline function launch_batched_thread!(cfunc, tid, argtup, start, stop)
-    p = ThreadingUtilities.taskpointer(tid)
     fptr = Base.unsafe_convert(Ptr{Cvoid}, cfunc)
-    while true
-        if ThreadingUtilities._atomic_cas_cmp!(p, ThreadingUtilities.SPIN, ThreadingUtilities.STUP)
-            setup_batch!(p, fptr, argtup, start, stop)
-            @assert ThreadingUtilities._atomic_cas_cmp!(p, ThreadingUtilities.STUP, ThreadingUtilities.TASK)
-            return
-        elseif ThreadingUtilities._atomic_cas_cmp!(p, ThreadingUtilities.WAIT, ThreadingUtilities.STUP)
-            setup_batch!(p, fptr, argtup, start, stop)
-            @assert ThreadingUtilities._atomic_cas_cmp!(p, ThreadingUtilities.STUP, ThreadingUtilities.LOCK)
-            ThreadingUtilities.wake_thread!(tid % UInt)
-            return
-        end
-        ThreadingUtilities.pause()
+    ThreadingUtilities.launch(tid, fptr, argtup, start, stop) do p, fptr, argtup, start, stop
+        setup_batch!(p, fptr, argtup, start, stop)
     end
 end
 
@@ -93,7 +82,7 @@ end
             tz += 0x00000001
             tm >>>= tz
             tid += tz
-            ThreadingUtilities.__wait(tid)
+            ThreadingUtilities.wait(tid)
             iszero(tm) && break
         end
         free_threads!(torelease)
@@ -157,7 +146,7 @@ end
             tz = (trailing_zeros(wait_mask) % UInt32) + 0x00000001
             wait_mask >>>= tz
             tid += tz
-            ThreadingUtilities.__wait(tid)
+            ThreadingUtilities.wait(tid)
             iszero(wait_mask) && break
         end
         nothing
