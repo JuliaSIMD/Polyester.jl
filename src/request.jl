@@ -1,4 +1,7 @@
-worker_size() = VectorizationBase.nextpow2(num_threads())
+function worker_size()
+    ws = VectorizationBase.nextpow2(num_threads())
+    IfElse.ifelse(Static.lt(ws,StaticInt{8}()), StaticInt{8}(), ws)
+end
 worker_type() = VectorizationBase.mask_type(worker_size())
 worker_pointer_type() = Ptr{worker_type()}
 

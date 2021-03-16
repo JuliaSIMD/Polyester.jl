@@ -3,6 +3,8 @@ module CheapThreads
 using ThreadingUtilities, VectorizationBase
 using VectorizationBase: num_threads, cache_linesize, __vload, __vstore!, register_size, False
 using StrideArraysCore: object_and_preserve, dereference
+import IfElse
+using Static
 using Requires
 
 export batch, num_threads
