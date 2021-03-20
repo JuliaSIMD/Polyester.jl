@@ -48,8 +48,31 @@ using Test
         end
         return target
     end
-    
+
     @test slow_cheap(1000, "9") ≈ slow_single_thread(1000,"9")
+end
+
+@testset "start and stop values" begin
+    println("Running start and stop values tests...")
+    function record_start_stop!((start_indices, end_indices), start, stop)
+        start_indices[Threads.threadid()] = start
+        end_indices[Threads.threadid()] = stop
+    end
+    
+    start_indices = zeros(Int, num_threads())
+    end_indices = zeros(Int, num_threads())
+
+    for range in [Int(num_threads()), 1000, 1001]
+        start_indices .= 0
+        end_indices .= 0
+        batch(record_start_stop!, (range, num_threads()), start_indices, end_indices)
+        indices_test_per_thread = end_indices .- start_indices .+ 1
+        acceptable_no_per_thread = [fld(range,num_threads()), cld(range,num_threads())]
+        @test all(in.(indices_test_per_thread, Ref(acceptable_no_per_thread)))
+        @test sum(indices_test_per_thread) == range
+        @test length(unique(start_indices)) == num_threads()
+        @test length(unique(end_indices)) == num_threads()
+    end
 end
 
 @testset "!isbits args" begin
