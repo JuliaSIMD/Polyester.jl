@@ -34,12 +34,22 @@ using Test
         end
         x[1,j] = target
     end
+
     function slow_cheap(n, digits)
         x = zeros(8, num_threads())
         batch(slow_task!, (num_threads(), num_threads()), x, digits, n)
         sum(@view(x[1,1:end]))
     end
-    slow_cheap(1000, "9")
+
+    function slow_single_thread(n, digits)
+        target = 0.0
+        for i ∈ 1:n
+            target += occursin(digits, string(i)) ? 0.0 : 1.0 / i
+        end
+        return target
+    end
+    
+    @test slow_cheap(1000, "9") ≈ slow_single_thread(1000,"9")
 end
 
 @testset "!isbits args" begin
