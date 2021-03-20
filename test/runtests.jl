@@ -25,22 +25,34 @@ using Test
     println("Running `tmap!` test...")
     @test tmap!(foo, z, x, y) ≈ foo.(x, y)
 
-    # TODO: why does this crash Julia?
-    # function slow_task!((x, digits, n), j, k)
-    #     start = 1 + (n * (j - 1)) ÷ num_threads()
-    #     stop =  (n* k) ÷ num_threads()
-    #     target = 0.0
-    #     for i ∈ start:stop
-    #         target += occursin(digits, string(i)) ? 0.0 : 1.0 / i
-    #     end
-    #     x[1,j] = target
-    # end
-    # function slow_cheap(n, digits)
-    #     x = zeros(8, num_threads())
-    #     batch(slow_task!, (num_threads(), num_threads()), x, digits, n)
-    #     sum(@view(x[1,1:end]))
-    # end
-    # slow_cheap(1000, "9")
+    function slow_task!((x, digits, n), j, k)
+        start = 1 + (n * (j - 1)) ÷ num_threads()
+        stop =  (n* k) ÷ num_threads()
+        target = 0.0
+        for i ∈ start:stop
+            target += occursin(digits, string(i)) ? 0.0 : 1.0 / i
+        end
+        x[1,j] = target
+    end
+    function slow_cheap(n, digits)
+        x = zeros(8, num_threads())
+        batch(slow_task!, (num_threads(), num_threads()), x, digits, n)
+        sum(@view(x[1,1:end]))
+    end
+    slow_cheap(1000, "9")
+end
+
+@testset "!isbits args" begin
+    println("Running !isbits args test...")
+    # Struct and string
+    mutable struct TestStruct
+        vec::Vector{String}
+    end
+    vec_length = 20
+    ts = TestStruct(["init" for i in 1:vec_length])
+    update_text!((ts, val), start, stop) = ts.vec[start:stop] .= val
+    batch(update_text!, (vec_length, num_threads()), ts, "new_val")
+    @test all(ts.vec .== "new_val")
 end
 
 @testset "ForwardDiff" begin
