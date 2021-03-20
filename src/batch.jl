@@ -73,7 +73,7 @@ end
             i == nthread && break
         end
         # @show start, ulen
-        f!(map(dereference, argtup), start, ulen)
+        f!(map(dereference, argtup), start+one(UInt), ulen)
         tm = mask(threads)
         tid = 0x00000000
         while true
@@ -139,7 +139,7 @@ end
             start = stop
             i == nthread && break
         end
-        f!(map(dereference, argtup), start, ulen)
+        f!(map(dereference, argtup), start+one(UInt), ulen)
         tid = 0x00000000
         while true
             VectorizationBase.assume(wait_mask ≠ zero(wait_mask))
