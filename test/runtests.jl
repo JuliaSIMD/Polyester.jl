@@ -25,22 +25,67 @@ using Test
     println("Running `tmap!` test...")
     @test tmap!(foo, z, x, y) ≈ foo.(x, y)
 
-    # TODO: why does this crash Julia?
-    # function slow_task!((x, digits, n), j, k)
-    #     start = 1 + (n * (j - 1)) ÷ num_threads()
-    #     stop =  (n* k) ÷ num_threads()
-    #     target = 0.0
-    #     for i ∈ start:stop
-    #         target += occursin(digits, string(i)) ? 0.0 : 1.0 / i
-    #     end
-    #     x[1,j] = target
-    # end
-    # function slow_cheap(n, digits)
-    #     x = zeros(8, num_threads())
-    #     batch(slow_task!, (num_threads(), num_threads()), x, digits, n)
-    #     sum(@view(x[1,1:end]))
-    # end
-    # slow_cheap(1000, "9")
+    function slow_task!((x, digits, n), j, k)
+        start = 1 + (n * (j - 1)) ÷ num_threads()
+        stop =  (n* k) ÷ num_threads()
+        target = 0.0
+        for i ∈ start:stop
+            target += occursin(digits, string(i)) ? 0.0 : 1.0 / i
+        end
+        x[1,j] = target
+    end
+
+    function slow_cheap(n, digits)
+        x = zeros(8, num_threads())
+        batch(slow_task!, (num_threads(), num_threads()), x, digits, n)
+        sum(@view(x[1,1:end]))
+    end
+
+    function slow_single_thread(n, digits)
+        target = 0.0
+        for i ∈ 1:n
+            target += occursin(digits, string(i)) ? 0.0 : 1.0 / i
+        end
+        return target
+    end
+
+    @test slow_cheap(1000, "9") ≈ slow_single_thread(1000,"9")
+end
+
+@testset "start and stop values" begin
+    println("Running start and stop values tests...")
+    function record_start_stop!((start_indices, end_indices), start, stop)
+        start_indices[Threads.threadid()] = start
+        end_indices[Threads.threadid()] = stop
+    end
+    
+    start_indices = zeros(Int, num_threads())
+    end_indices = zeros(Int, num_threads())
+
+    for range in [Int(num_threads()), 1000, 1001]
+        start_indices .= 0
+        end_indices .= 0
+        batch(record_start_stop!, (range, num_threads()), start_indices, end_indices)
+        indices_test_per_thread = end_indices .- start_indices .+ 1
+        acceptable_no_per_thread = [fld(range,num_threads()), cld(range,num_threads())]
+        @test all(in.(indices_test_per_thread, Ref(acceptable_no_per_thread)))
+        @test sum(indices_test_per_thread) == range
+        @test length(unique(start_indices)) == num_threads()
+        @test length(unique(end_indices)) == num_threads()
+    end
+end
+
+@testset "!isbits args" begin
+    println("Running !isbits args test...")
+    # Struct and string
+    mutable struct TestStruct
+        vec::Vector{String}
+    end
+    vec_length = 20
+    ts = TestStruct(["init" for i in 1:vec_length])
+    update_text!((ts, val), start, stop) = ts.vec[start:stop] .= val
+    batch(update_text!, (vec_length, num_threads()), ts, "new_val")
+    @test all(ts.vec .== "new_val")
 end
 
 @testset "ForwardDiff" begin
