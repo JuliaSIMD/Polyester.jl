@@ -180,15 +180,12 @@ end
 function batch(
     f!::F, (len, nbatches, reserve_per_worker)::Tuple{Vararg{Integer,3}}, args::Vararg{Any,K}
 ) where {F,K}
-
+    ulen = len % UInt
+    nbatches ≤ 1 && @goto NOTHREADS
     requested_threads = reserve_per_worker*nbatches
     threads, torelease = request_threads(Base.Threads.threadid(), requested_threads - one(nbatches))
     nthread = length(threads)
-    ulen = len % UInt
-    if iszero(nthread)
-        f!(args, one(UInt), ulen)
-        return
-    end
+    iszero(nthread) && @goto NOTHREADS
     total_threads = nthread + one(nthread)
     nbatch = min(total_threads, nbatches % UInt32)
     
@@ -201,7 +198,10 @@ function batch(
     else
         _batch_reserve(f!, mask(threads), nbatch-one(nbatch), unused_threads, torelease, Nr, Nd, ulen, args...)
     end
-    nothing
+    return nothing
+    @label NOTHREADS
+    f!(args, one(UInt), ulen)
+    return nothing
 end
 
 
