@@ -3,7 +3,11 @@ import .ForwardDiff
 
 const DiffResult = ForwardDiff.DiffResults.DiffResult
 
-function cld_fast(n, d)
+function cld_fast(a::A,b::B) where {A,B}
+    T = promote_type(A,B)
+    cld_fast(a%T,b%T)
+end
+function cld_fast(n::T, d::T) where {T}
     x = Base.udiv_int(n, d)
     x += n != d*x
 end

@@ -16,7 +16,7 @@ function reserved(id)
 end
 function reserve_threads!(id, reserve)
     p = Base.unsafe_convert(worker_pointer_type(), STATES)
-    __vstore!(p, VectorizationBase.lazymul(cache_linesize(), id), reserve, False(), False(), False(), register_size())
+    __vstore!(p, reserve % worker_type(), VectorizationBase.lazymul(cache_linesize(), id), False(), False(), False(), register_size())
     nothing
 end
 function free_threads!(freed_threads)
@@ -27,7 +27,7 @@ function free_local_threads!()
     tid = Base.Threads.threadid()
     tmask = one(worker_type()) << (tid - one(tid))
     r = reserved(tid) | tmask
-    reserve_threads!(id, zero(worker_type()))
+    reserve_threads!(tid, zero(worker_type()))
     free_threads!(r)
 end
 
