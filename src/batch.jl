@@ -68,11 +68,9 @@ end
             tid += tz
             tm >>>= tz
             launch_batched_thread!(cfunc, tid, argtup, start, stop)
-            # @show start, stop
             start = stop
             i == nthread && break
         end
-        # @show start, ulen
         f!(map(dereference, argtup), start+one(UInt), ulen)
         tm = mask(threads)
         tid = 0x00000000
@@ -106,7 +104,7 @@ end
         Ndp = Nd + one(Nd)
         nres_per = Base.udiv_int(unused_threads, nbatch)
         nres_rem = unused_threads - nres_per * nbatch
-        nres_prr = nres_prr + one(nres_prr)
+        nres_prr = nres_per + one(nres_per)
     end
     block = quote
         start = zero(UInt)
@@ -201,7 +199,7 @@ function batch(
     if iszero(unused_threads)
         _batch_no_reserve(f!, mask(threads), nthread, torelease, Nr, Nd, ulen, args...)
     else
-        _batch_no_reserve(f!, mask(threads), nthread, unused_threads, torelease, Nr, Nd, ulen, args...)
+        _batch_reserve(f!, mask(threads), nbatch-one(nbatch), unused_threads, torelease, Nr, Nd, ulen, args...)
     end
     nothing
 end
