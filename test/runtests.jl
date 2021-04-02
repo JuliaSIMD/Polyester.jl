@@ -2,6 +2,12 @@ println("Starting tests with $(Threads.nthreads()) threads out of `Sys.CPU_THREA
 using CheapThreads, Aqua, ForwardDiff
 using Test
 
+function bsin!(y,x)
+    @batch for i ∈ eachindex(y,x)
+        y[i] = sin(x[i])
+    end
+end
+
 @testset "Range Map" begin
     function rangemap!(f::F, allargs, start, stop) where {F}
         dest = first(allargs)
@@ -50,6 +56,10 @@ using Test
     end
 
     @test slow_cheap(1000, "9") ≈ slow_single_thread(1000,"9")
+
+    x = randn(100_000); y = similar(x);
+    bsin!(y, x)
+    @test y == sin.(x)
 end
 
 @testset "start and stop values" begin
