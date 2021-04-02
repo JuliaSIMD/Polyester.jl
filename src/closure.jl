@@ -40,15 +40,15 @@ function totype!(funcs::Expr, arguments::Vector, defined::Set, expr::Expr)::Expr
     args = expr.args
     updateind = findfirst(Base.Fix2(===, head), (:(+=), :(-=), :(*=), :(/=)))
     if updateind !== nothing
-        args[2] = Expr(:call, (:(+), :(-), :(*), :(/))[updateind], args[1], args[2])
+        args[2] = Expr(:call, (:(+), :(-), :(*), :(/))[updateind], copy(args[1]), args[2])
         head = :(=)
     end
     t = Expr(:tuple)
     ex = Expr(:curly, :Expression, QuoteNode(head), t)
     if head === :call
         push!(funcs.args, popfirst!(args))
-    elseif head === :(=)
-        args[1] isa Symbol && push!(defined, args[1])
+    elseif (head === :(=)) && args[1] isa Symbol
+        push!(defined, args[1])
     end
     for a ∈ args
         push!(t.args, totype!(funcs, arguments, defined, a))
