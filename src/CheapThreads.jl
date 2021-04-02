@@ -1,17 +1,19 @@
 module CheapThreads
 
 using ThreadingUtilities, VectorizationBase
+using ArrayInterface: static_length, static_step, static_first
 using VectorizationBase: num_threads, cache_linesize, __vload, __vstore!, register_size, False
 using StrideArraysCore: object_and_preserve, dereference
 import IfElse
 using Static
 using Requires
 
-export batch, num_threads
+export batch, @batch, num_threads
 
 
 include("request.jl")
 include("batch.jl")
+include("closure.jl")
 include("unsignediterator.jl")
 
 # reset_workers!() = WORKERS[] = UInt128((1 << (num_threads() - 1)) - 1)

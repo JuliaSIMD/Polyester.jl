@@ -5,7 +5,7 @@ function (b::BatchClosure{F,A,B})(p::Ptr{UInt}) where {F,A,B}
     (offset, args) = ThreadingUtilities.load(p, A, 2*sizeof(UInt))
     (offset, start) = ThreadingUtilities.load(p, UInt, offset)
     (offset, stop ) = ThreadingUtilities.load(p, UInt, offset)
-    b.f(args, start+one(UInt), stop)
+    b.f(args, (start+one(UInt))%Int, stop%Int)
     B && free_local_threads!()
     nothing
 end
@@ -71,7 +71,7 @@ end
             start = stop
             i == nthread && break
         end
-        f!(map(dereference, argtup), start+one(UInt), ulen)
+        f!(map(dereference, argtup), (start+one(UInt)) % Int, ulen % Int)
         tm = mask(threads)
         tid = 0x00000000
         while true
@@ -137,7 +137,7 @@ end
             start = stop
             i == nthread && break
         end
-        f!(map(dereference, argtup), start+one(UInt), ulen)
+        f!(map(dereference, argtup), (start+one(UInt)) % Int, ulen % Int)
         tid = 0x00000000
         while true
             VectorizationBase.assume(wait_mask ≠ zero(wait_mask))
@@ -167,7 +167,7 @@ function batch(
     nthread = length(threads)
     ulen = len % UInt
     if iszero(nthread)
-        f!(args, one(UInt), ulen)
+        f!(args, one(Int), ulen % Int)
         return
     end
     nbatch = nthread + one(nthread)
@@ -200,7 +200,7 @@ function batch(
     end
     return nothing
     @label NOTHREADS
-    f!(args, one(UInt), ulen)
+    f!(args, one(Int), ulen%Int)
     return nothing
 end
 
