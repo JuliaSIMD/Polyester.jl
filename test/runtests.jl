@@ -7,6 +7,13 @@ function bsin!(y,x)
         y[i] = sin(x[i])
     end
 end
+function sin_batch_sum(v)
+    s = zeros(8,Threads.nthreads())
+    @batch for i = 1:length(v)
+        s[1,Threads.threadid()] += sin(v[i])
+    end
+    return sum(view(s, 1, :))
+end
 
 @testset "Range Map" begin
     function rangemap!(f::F, allargs, start, stop) where {F}
@@ -60,6 +67,7 @@ end
     x = randn(100_000); y = similar(x);
     bsin!(y, x)
     @test y == sin.(x)
+    @test sum(sin,x) ≈ sin_batch_sum(x)
 end
 
 @testset "start and stop values" begin
