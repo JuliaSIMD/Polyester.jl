@@ -15,6 +15,15 @@ function sin_batch_sum(v)
     end
     return sum(view(s, 1, :))
 end
+function rowsum_batch!(x, A)
+    @batch for n ∈ axes(A,2)
+        s = 0.0
+        @simd for m ∈ axes(A,1)
+            s += A[m,n]
+        end
+        x[n] = s
+    end
+end
 
 @testset "Range Map" begin
     function rangemap!(f::F, allargs, start, stop) where {F}
@@ -69,6 +78,10 @@ end
     bsin!(y, x)
     @test y == sin.(x)
     @test sum(sin,x) ≈ sin_batch_sum(x)
+
+    A = rand(200,300); x = Vector{Float64}(undef, 300);
+    rowsum_batch!(x, A);
+    @test x ≈ vec(sum(A,dims=1))
 end
 
 @testset "start and stop values" begin
@@ -121,7 +134,7 @@ end
     batch((length(x), max(1,num_threads()>>1), 2), dx, x) do (dx,x), start, stop
         CheapThreads.threaded_gradient!(f, view(dx, start%Int:stop%Int), view(x, start%Int:stop%Int), ForwardDiff.Chunk(8))
     end;
-    @test dx == dxref
+    @test dx ≈ dxref
 end
 
 println("Package tests complete. Running `Aqua` checks.")

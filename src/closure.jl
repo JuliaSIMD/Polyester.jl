@@ -92,18 +92,18 @@ end
 
 struct Closure{E,A} <: Function end
 
-@generated function (::Closure{E,A})(args::Tuple{Vararg{Any,K}}, var"##SUBSTART##"::Int, var"##SUBSTOP##"::Int) where {K,A,E}
+@generated function (::Closure{var"##E##",var"##A##"})(var"##args##"::Tuple{Vararg{Any,var"##K##"}}, var"##SUBSTART##"::Int, var"##SUBSTOP##"::Int) where {var"##K##",var"##A##",var"##E##"}
     q = Expr(:block)
     gf = GlobalRef(Core, :getfield)
-    for k ∈ 1:K
-        push!(q.args, Expr(:(=), A[k], Expr(:call, gf, :args, k, false)))
+    for k ∈ 1:var"##K##"
+        push!(q.args, Expr(:(=), var"##A##"[k], Expr(:call, gf, Symbol("##args##"), k, false)))
     end
     q = quote
         @inbounds begin
             $q
             var"##LOOPSTART##" = var"##SUBSTART##" * var"##LOOP_STEP##" - var"##LOOPOFFSET##"
             var"##LOOP_STOP##" = var"##SUBSTOP##" * var"##LOOP_STEP##" - var"##LOOPOFFSET##"
-            $(toexpr(E))
+            $(toexpr(var"##E##"))
         end
         nothing
     end
