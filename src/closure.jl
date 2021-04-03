@@ -34,13 +34,15 @@ function define_induction_variables!(defined::Set, ex::Expr) # add `i` in `for i
     end
 end
 
+maybecopy(s::Symbol) = s
+maybecopy(ex::Expr) = copy(ex)
 function totype!(funcs::Expr, arguments::Vector, defined::Set, expr::Expr)::Expr
     define_induction_variables!(defined, expr)
     head = expr.head
     args = expr.args
     updateind = findfirst(Base.Fix2(===, head), (:(+=), :(-=), :(*=), :(/=)))
     if updateind !== nothing
-        args[2] = Expr(:call, (:(+), :(-), :(*), :(/))[updateind], copy(args[1]), args[2])
+        args[2] = Expr(:call, (:(+), :(-), :(*), :(/))[updateind], maybecopy(args[1]), args[2])
         head = :(=)
     end
     t = Expr(:tuple)
