@@ -46,9 +46,9 @@ function totype!(funcs::Expr, arguments::Vector, defined::Set, expr::Expr)::Expr
     t = Expr(:tuple)
     ex = Expr(:curly, :Expression, QuoteNode(head), t)
     if head === :call
-        push!(funcs.args, popfirst!(args))
-    elseif (head === :(=)) && args[1] isa Symbol
-        push!(defined, args[1])
+        push!(funcs.args, esc(popfirst!(args)))
+    elseif head === :(=)
+        args[1] isa Symbol && push!(defined, args[1])
     end
     for a ∈ args
         push!(t.args, totype!(funcs, arguments, defined, a))
@@ -162,9 +162,9 @@ function enclose(exorig::Expr, reserve_per = 0)
     argsyms = Expr(:tuple)
     threadtup = Expr(:tuple, iter_leng)
     if reserve_per ≤ 0
-        push!(threadtup.args, :(CheapThreads.num_threads()))
+        push!(threadtup.args, :(min($iter_leng, CheapThreads.num_threads())))
     else
-        push!(threadtup.args, :(cld(CheapThreads.num_threads(), $reserve_per)), reserve_per)
+        push!(threadtup.args, :(min($iter_leng, cld(CheapThreads.num_threads(), $reserve_per))), reserve_per)
     end
     closure = Expr(:call, Expr(:curly, GlobalRef(CheapThreads, :Closure), typexpr, argsyms))
     batchcall = Expr(:call, GlobalRef(CheapThreads, :batch), closure, threadtup)

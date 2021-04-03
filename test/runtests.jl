@@ -7,9 +7,10 @@ function bsin!(y,x)
         y[i] = sin(x[i])
     end
 end
+myindices(x) = 1:length(x) # test hygiene, issue #11
 function sin_batch_sum(v)
     s = zeros(8,Threads.nthreads())
-    @batch for i = 1:length(v)
+    @batch for i = myindices(v)
         s[1,Threads.threadid()] += sin(v[i])
     end
     return sum(view(s, 1, :))
