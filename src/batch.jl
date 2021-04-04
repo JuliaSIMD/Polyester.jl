@@ -44,8 +44,7 @@ function add_var!(q, argtup, gcpres, ::Type{T}, argtupname, gcpresname, k) where
         push!(argtup.args, parg_k)
         push!(gcpres.args, garg_k)
     end
-end
-
+end   
 
 @generated function _batch_no_reserve(
     f!::F, threadmask, nthread, torelease, Nr, Nd, ulen, args::Vararg{Any,K}
@@ -163,18 +162,19 @@ end
 function batch(
     f!::F, (len, nbatches)::Tuple{Vararg{Integer,2}}, args::Vararg{Any,K}
 ) where {F,K}
+    nbatches == 0 && return
     threads, torelease = request_threads(Base.Threads.threadid(), nbatches - one(nbatches))
     nthread = length(threads)
     ulen = len % UInt
-    if iszero(nthread)
+    if nthread % Int32 ≤ zero(Int32)
         f!(args, one(Int), ulen % Int)
         return
     end
     nbatch = nthread + one(nthread)
-    
+
     Nd = Base.udiv_int(ulen, nbatch % UInt) # reasonable for `ulen` to be ≥ 2^32
     Nr = ulen - Nd * nbatch
-    
+
     _batch_no_reserve(f!, mask(threads), nthread, torelease, Nr, Nd, ulen, args...)
 end
 function batch(
@@ -188,7 +188,7 @@ function batch(
     iszero(nthread) && @goto NOTHREADS
     total_threads = nthread + one(nthread)
     nbatch = min(total_threads, nbatches % UInt32)
-    
+
     Nd = Base.udiv_int(ulen, nbatch % UInt)
     Nr = ulen - Nd * nbatch
 
@@ -203,5 +203,3 @@ function batch(
     f!(args, one(Int), ulen%Int)
     return nothing
 end
-
-

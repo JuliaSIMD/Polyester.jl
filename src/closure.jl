@@ -13,14 +13,6 @@ function totype!(funcs::Expr, arguments::Vector, defined::Set, q::Expr, sym::Sym
     end
     QuoteNode(sym)
 end
-# function totype(expr::Expr)::Expr
-#     t = Expr(:tuple)
-#     ex = Expr(:curly, :Expression, QuoteNode(expr.head), t)
-#     for a ∈ expr.args
-#         push!(t.args, totype(a))
-#     end
-#     Expr(:call, ex)
-# end
 function define_tup!(defined::Set, ex::Expr)
     for a ∈ ex.args
         if a isa Symbol
@@ -121,9 +113,7 @@ end
 @generated function substitute_functions(::Expression{H,A}, funcs::Tuple{Vararg{Any,K}}) where {H,A,K}
     ex, k = _substitute_functions(Expression{H,A}(),0)
     @assert k == K
-    ex = Expr(:block, Expr(:meta,:inline), ex)
-    # Core.println(ex)
-    ex
+    Expr(:block, Expr(:meta,:inline), ex)
 end
 
 toexpr(x) = x
@@ -148,7 +138,7 @@ struct Closure{E,A} <: Function end
     for k ∈ 1:var"##K##"
         push!(q.args, Expr(:(=), var"##A##"[k], Expr(:call, gf, Symbol("##args##"), k, false)))
     end
-    q = quote
+    quote
         @inbounds begin
             $q
             var"##LOOPSTART##" = var"##SUBSTART##" * var"##LOOP_STEP##" - var"##LOOPOFFSET##"
@@ -157,8 +147,6 @@ struct Closure{E,A} <: Function end
         end
         nothing
     end
-    # Core.println(q)
-    q
 end
 
 # @generated function (::Closure{E,S,A})(p::Ptr{UInt}) where {E,S,A}
@@ -216,7 +204,7 @@ function enclose(exorig::Expr, reserve_per = 0)
     end
     typexpr_incomplete = totype!(funcs, arguments, defined, q, ex)
     typexpr = Expr(:call, GlobalRef(CheapThreads, :substitute_functions), typexpr_incomplete, funcs)
-
+    
     argsyms = Expr(:tuple)
     threadtup = Expr(:tuple, iter_leng)
     if reserve_per ≤ 0
@@ -224,21 +212,14 @@ function enclose(exorig::Expr, reserve_per = 0)
     else
         push!(threadtup.args, :(min($iter_leng, cld(CheapThreads.num_threads(), $reserve_per))), reserve_per)
     end
-    # closure = Expr(:call, Expr(:curly, GlobalRef(CheapThreads, :Closure), typexpr, argsyms))
     closure = Expr(:call, Expr(:curly, GlobalRef(CheapThreads, :Closure), Symbol("##type#inserted##"), argsyms))
     batchcall = Expr(:call, GlobalRef(CheapThreads, :batch), closure, threadtup)
     for a ∈ arguments
         push!(argsyms.args, QuoteNode(a))
         push!(batchcall.args, esc(a))
     end
-    
-    # loop_ex = (ex.args[1])::Expr
-    # m = __module__
     push!(q.args, :(var"##type#inserted##" = $typexpr))
     push!(q.args, batchcall)
-    #     # @show var"##type#inserted##"
-    #     $batchcall
-    # end
     quote
         if CheapThreads.num_threads() == 1
             $(esc(exorig))
@@ -254,7 +235,4 @@ end
 macro batch(reserve_per, ex)
     enclose(macroexpand(__module__, ex), reserve_per)
 end
-# macro batch(kwarg, ex)
-#     enclose(ex, kwarg)
-# end
 

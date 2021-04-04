@@ -53,6 +53,12 @@ function issue15!(dest, src)
     end
     dest
 end
+function issue16!(dest)
+    @batch for i in 2:1
+        dest[i] = i
+    end
+    true
+end
 
 @testset "Range Map" begin
 
@@ -101,7 +107,9 @@ end
     end
     let src = rand(100), dest = (; src = similar(src));
         @test issue15!(dest, src).src == src
+        @test issue16!(dest)
     end
+    
 end
 
 @testset "start and stop values" begin

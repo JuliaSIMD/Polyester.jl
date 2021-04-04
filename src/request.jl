@@ -33,10 +33,10 @@ end
 
 function _request_threads(id::UInt32, num_requested::UInt32)
     reserved_threads = reserved(id)
-    reserved_count = count_ones(reserved_threads)
+    reserved_count = count_ones(reserved_threads)%UInt32
     no_threads = zero(worker_type())
     # reserved_count ≥ num_requested && return reserved_threads, no_threads
-    reserved_count ≥ num_requested && return UnsignedIteratorEarlyStop(reserved_threads, num_requested), no_threads
+    reserved_count%Int32 ≥ num_requested%Int32 && return UnsignedIteratorEarlyStop(reserved_threads, num_requested), no_threads
     # to get more, we xchng, setting all to `0`
     # then see which we need, and free those we aren't using.
     wp = worker_pointer()
