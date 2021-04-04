@@ -5,9 +5,9 @@ totype(s::Number) = s
 totype(::Nothing) = nothing
 
 
-totype!(funcs::Expr, arguments::Vector, defined::Set, sym) = sym
-function totype!(funcs::Expr, arguments::Vector, defined::Set, sym::Symbol)
-    if sym ∉ defined
+totype!(funcs::Expr, arguments::Vector, defined::Set, q::Expr, sym) = sym
+function totype!(funcs::Expr, arguments::Vector, defined::Set, q::Expr, sym::Symbol)
+    if (sym ∉ defined) && sym ≢ :nothing
         push!(defined, sym)
         push!(arguments, sym)
     end
@@ -21,7 +21,15 @@ end
 #     end
 #     Expr(:call, ex)
 # end
-
+function define_tup!(defined::Set, ex::Expr)
+    for a ∈ ex.args
+        if a isa Symbol
+            push!(defined, a)
+        else
+            define_tup!(defined, a)
+        end
+    end
+end
 function define_induction_variables!(defined::Set, ex::Expr) # add `i` in `for i ∈ looprange` to `defined`
     ex.head === :for || return
     loops = ex.args[1]
@@ -36,7 +44,15 @@ end
 
 maybecopy(s::Symbol) = s
 maybecopy(ex::Expr) = copy(ex)
-function totype!(funcs::Expr, arguments::Vector, defined::Set, expr::Expr)::Expr
+depends_on_defined(defined::Set, f)::Bool = false
+depends_on_defined(defined::Set, f::Symbol)::Bool = f ∈ defined
+function depends_on_defined(defined::Set, f::Expr)::Bool
+    for a ∈ f.args
+        depends_on_defined(defined, a) && return true
+    end
+    false
+end
+function totype!(funcs::Expr, arguments::Vector, defined::Set, q::Expr, expr::Expr)
     define_induction_variables!(defined, expr)
     head = expr.head
     args = expr.args
@@ -48,12 +64,32 @@ function totype!(funcs::Expr, arguments::Vector, defined::Set, expr::Expr)::Expr
     t = Expr(:tuple)
     ex = Expr(:curly, :Expression, QuoteNode(head), t)
     if head === :call
-        push!(funcs.args, esc(popfirst!(args)))
+        f = popfirst!(args)
+        if length(args) > 0 || depends_on_defined(defined, f)
+            push!(funcs.args, esc(f))
+        else
+            fgen = gensym(:f)
+            push!(q.args, Expr(:(=), esc(fgen), Expr(:call, f)))
+            return QuoteNode(fgen)
+        end
     elseif head === :(=)
-        args[1] isa Symbol && push!(defined, args[1])
+        arg1 = first(args)
+        if arg1 isa Symbol
+            push!(defined, arg1)
+        elseif Meta.isexpr(arg1, :tuple)
+            define_tup!(defined, arg1)
+        end
+    elseif head === :inbounds
+        arg1 = only(args)
+        if arg1 isa Bool
+            push!(t.args, arg1)
+        else
+            push!(t.args, QuoteNode(arg1))
+        end
+        return Expr(:call, ex)
     end
     for a ∈ args
-        push!(t.args, totype!(funcs, arguments, defined, a))
+        push!(t.args, totype!(funcs, arguments, defined, q, a))
     end
     Expr(:call, ex)
 end
@@ -72,12 +108,14 @@ function _substitute_functions(@nospecialize(_::Expression{H,A}), k::Int) where 
             push!(t.args, totype(a))
         end
     end
-    Expr(:block, Expr(:meta,:inline), Expr(:call, ex)), k
+    Expr(:call, ex), k
 end
 
 @generated function substitute_functions(::Expression{H,A}, funcs::Tuple{Vararg{Any,K}}) where {H,A,K}
     ex, k = _substitute_functions(Expression{H,A}(),0)
     @assert k == K
+    ex = Expr(:block, Expr(:meta,:inline), ex)
+    # Core.println(ex)
     ex
 end
 
@@ -158,7 +196,13 @@ function enclose(exorig::Expr, reserve_per = 0)
     loop = firstloop.args[2]
     firstloop.args[2] = :($loopstart:$loop_step:$loop_stop)
     # typexpr_incomplete is missing `funcs`
-    typexpr_incomplete = totype!(funcs, arguments, defined, ex)
+    q = quote
+        $loop_sym = $(esc(loop))
+        $iter_leng = static_length($loop_sym)
+        $(esc(loop_step)) = CheapThreads.static_step($loop_sym)
+        $(esc(loop_offs)) = CheapThreads.static_first($loop_sym) - $(Static.One())
+    end
+    typexpr_incomplete = totype!(funcs, arguments, defined, q, ex)
     typexpr = Expr(:call, GlobalRef(CheapThreads, :substitute_functions), typexpr_incomplete, funcs)
 
     argsyms = Expr(:tuple)
@@ -168,7 +212,8 @@ function enclose(exorig::Expr, reserve_per = 0)
     else
         push!(threadtup.args, :(min($iter_leng, cld(CheapThreads.num_threads(), $reserve_per))), reserve_per)
     end
-    closure = Expr(:call, Expr(:curly, GlobalRef(CheapThreads, :Closure), typexpr, argsyms))
+    # closure = Expr(:call, Expr(:curly, GlobalRef(CheapThreads, :Closure), typexpr, argsyms))
+    closure = Expr(:call, Expr(:curly, GlobalRef(CheapThreads, :Closure), Symbol("##type#inserted##"), argsyms))
     batchcall = Expr(:call, GlobalRef(CheapThreads, :batch), closure, threadtup)
     for a ∈ arguments
         push!(argsyms.args, QuoteNode(a))
@@ -177,15 +222,11 @@ function enclose(exorig::Expr, reserve_per = 0)
     
     # loop_ex = (ex.args[1])::Expr
     # m = __module__
-    q = quote
-        $loop_sym = $(esc(loop))
-        $iter_leng = static_length($loop_sym)
-        $(esc(loop_step)) = CheapThreads.static_step($loop_sym)
-        $(esc(loop_offs)) = CheapThreads.static_first($loop_sym) - $(Static.One())
-        typesinserted = $typexpr
-        # @show typesinserted
-        $batchcall
-    end
+    push!(q.args, :(var"##type#inserted##" = $typexpr))
+    push!(q.args, batchcall)
+    #     # @show var"##type#inserted##"
+    #     $batchcall
+    # end
     quote
         if CheapThreads.num_threads() == 1
             $(esc(exorig))
@@ -196,10 +237,10 @@ function enclose(exorig::Expr, reserve_per = 0)
 end
 
 macro batch(ex)
-    enclose(ex)
+    enclose(macroexpand(__module__, ex))
 end
 macro batch(reserve_per, ex)
-    enclose(ex, reserve_per)
+    enclose(macroexpand(__module__, ex), reserve_per)
 end
 # macro batch(kwarg, ex)
 #     enclose(ex, kwarg)
