@@ -3,7 +3,7 @@ struct Expression{H,A} end
 totype(s::Symbol) = QuoteNode(s)
 totype(s::Number) = s
 totype(::Nothing) = nothing
-
+totype(::Val{T}) where {T} = Val{T}()
 
 totype!(funcs::Expr, arguments::Vector, defined::Set, q::Expr, sym) = sym
 function totype!(funcs::Expr, arguments::Vector, defined::Set, q::Expr, sym::Symbol)
@@ -70,7 +70,7 @@ function totype!(funcs::Expr, arguments::Vector, defined::Set, q::Expr, expr::Ex
         else
             fgen = gensym(:f)
             push!(q.args, Expr(:(=), esc(fgen), Expr(:call, f)))
-            return QuoteNode(fgen)
+            return esc(fgen)
         end
     elseif head === :(=)
         arg1 = first(args)
