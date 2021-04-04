@@ -45,7 +45,9 @@ end
 maybecopy(s::Symbol) = s
 maybecopy(ex::Expr) = copy(ex)
 depends_on_defined(defined::Set, f)::Bool = false
-depends_on_defined(defined::Set, f::Symbol)::Bool = f ∈ defined
+depends_on_defined(defined::Set, f::Function)::Bool = f === Threads.threadid
+depends_on_defined(defined::Set, f::QuoteNode) = f.value === :threadid
+depends_on_defined(defined::Set, f::Symbol)::Bool = (f ∈ defined) || (f === :threadid)
 function depends_on_defined(defined::Set, f::Expr)::Bool
     for a ∈ f.args
         depends_on_defined(defined, a) && return true
@@ -79,12 +81,13 @@ function totype!(funcs::Expr, arguments::Vector, defined::Set, q::Expr, expr::Ex
         elseif Meta.isexpr(arg1, :tuple)
             define_tup!(defined, arg1)
         end
-    elseif head === :inbounds
-        arg1 = only(args)
-        if arg1 isa Bool
-            push!(t.args, arg1)
-        else
-            push!(t.args, QuoteNode(arg1))
+    elseif head ∈ (:inbounds, :loopinfo)
+        for arg ∈ args
+            if arg isa Bool
+                push!(t.args, arg)
+            else
+                push!(t.args, QuoteNode(arg))
+            end
         end
         return Expr(:call, ex)
     end
