@@ -162,7 +162,6 @@ end
 function batch(
     f!::F, (len, nbatches)::Tuple{Vararg{Integer,2}}, args::Vararg{Any,K}
 ) where {F,K}
-    nbatches == 0 && return
     threads, torelease = request_threads(Base.Threads.threadid(), nbatches - one(nbatches))
     nthread = length(threads)
     ulen = len % UInt
