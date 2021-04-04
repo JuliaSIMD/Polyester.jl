@@ -91,7 +91,9 @@ function totype!(funcs::Expr, arguments::Vector, defined::Set, q::Expr, expr::Ex
         end
         return Expr(:call, ex)
     elseif head === :(.)
-        push!(defined, args[2].value)
+        push!(t.args, totype!(funcs, arguments, defined, q, args[1]))
+        push!(t.args, args[2])
+        return Expr(:call, ex)
     end
     for a ∈ args
         push!(t.args, totype!(funcs, arguments, defined, q, a))

@@ -47,7 +47,12 @@ function tmap!(f::F, args::Vararg{AbstractArray,K}) where {K,F}
     batch(mapfun!, (N, num_threads()), args...)
     dest
 end
-
+function issue15!(dest, src)
+    @batch for i in eachindex(src)
+        dest.src[i] = src[i]
+    end
+    dest
+end
 
 @testset "Range Map" begin
 
@@ -91,9 +96,12 @@ end
     rowsum_batch!(x, A);
     @test x ≈ vec(sum(A,dims=1))
 
-    dest = zeros(10^3); src = (; a = (; b = rand(length(dest))));
-    @test bar!(dest, src) == src.a.b
-
+    let dest = zeros(10^3), src = (; a = (; b = rand(length(dest))));
+        @test bar!(dest, src) == src.a.b
+    end
+    let src = rand(100), dest = (; src = similar(src));
+        @test issue15!(dest, src).src == src
+    end
 end
 
 @testset "start and stop values" begin
