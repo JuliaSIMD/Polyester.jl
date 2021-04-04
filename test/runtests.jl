@@ -24,24 +24,32 @@ function rowsum_batch!(x, A)
         x[n] = s
     end
 end
+function bar!(dest, src)
+    @batch for i in eachindex(dest)
+        dest[i] = src.a.b[i]
+    end
+    dest
+end
+
+function rangemap!(f::F, allargs, start, stop) where {F}
+    dest = first(allargs)
+    args = Base.tail(allargs)
+    @inbounds @simd for i ∈ start:stop
+        dest[i] = f(Base.unsafe_getindex.(args, i)...)
+    end
+    nothing
+end
+
+function tmap!(f::F, args::Vararg{AbstractArray,K}) where {K,F}
+    dest = first(args)
+    N = length(dest)
+    mapfun! = (allargs, start, stop) -> rangemap!(f, allargs, start, stop)
+    batch(mapfun!, (N, num_threads()), args...)
+    dest
+end
+
 
 @testset "Range Map" begin
-    function rangemap!(f::F, allargs, start, stop) where {F}
-        dest = first(allargs)
-        args = Base.tail(allargs)
-        @inbounds @simd for i ∈ start:stop
-            dest[i] = f(Base.unsafe_getindex.(args, i)...)
-        end
-        nothing
-    end
-
-    function tmap!(f::F, args::Vararg{AbstractArray,K}) where {K,F}
-        dest = first(args)
-        N = length(dest)
-        mapfun! = (allargs, start, stop) -> rangemap!(f, allargs, start, stop)
-        batch(mapfun!, (N, num_threads()), args...)
-        dest
-    end
 
     x = rand(1024); y = rand(length(x)); z = similar(x);
     foo(x,y) = exp(-0.5abs2(x-y))
@@ -82,6 +90,10 @@ end
     A = rand(200,300); x = Vector{Float64}(undef, 300);
     rowsum_batch!(x, A);
     @test x ≈ vec(sum(A,dims=1))
+
+    dest = zeros(10^3); src = (; a = (; b = rand(length(dest))));
+    @test bar!(dest, src) == src.a.b
+
 end
 
 @testset "start and stop values" begin

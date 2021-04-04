@@ -90,6 +90,8 @@ function totype!(funcs::Expr, arguments::Vector, defined::Set, q::Expr, expr::Ex
             end
         end
         return Expr(:call, ex)
+    elseif head === :(.)
+        push!(defined, args[2].value)
     end
     for a ∈ args
         push!(t.args, totype!(funcs, arguments, defined, q, a))
@@ -125,8 +127,13 @@ end
 toexpr(x) = x
 function (toexpr(@nospecialize(_::Expression{H,A}))::Expr) where {H,A}
     ex = Expr(H)
-    for a ∈ A
-        push!(ex.args, toexpr(a))
+    if H === :(.)
+        push!(ex.args, toexpr(A[1]))
+        push!(ex.args, QuoteNode(A[2]))
+    else
+        for a ∈ A
+            push!(ex.args, toexpr(a))
+        end
     end
     ex
 end
