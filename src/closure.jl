@@ -76,7 +76,7 @@ function extractargs!(arguments::Vector{Symbol}, defined::Set, expr::Expr)
     end
 end
 
-function enclose(exorig::Expr, reserve_per = 0)
+function enclose(exorig::Expr, reserve_per = 0, minbatchsize = 1)
     Meta.isexpr(exorig, :for, 2) || throw(ArgumentError("Expression invalid; should be a for loop."))
     ex = copy(exorig)
     loop_sym = Symbol("##LOOP##")
@@ -104,16 +104,25 @@ function enclose(exorig::Expr, reserve_per = 0)
         $loop_offs = CheapThreads.static_first($loop_sym)
     end
     threadtup = Expr(:tuple, iter_leng)
-    if reserve_per ≤ 0
-        push!(threadtup.args, :(min($iter_leng, CheapThreads.num_threads())))
+    if minbatchsize ≤ 1
+        if reserve_per ≤ 0
+            push!(threadtup.args, :(min($iter_leng, CheapThreads.num_threads())))
+        else
+            push!(threadtup.args, :(min($iter_leng, cld(CheapThreads.num_threads(), $reserve_per))), reserve_per)
+        end
     else
-        push!(threadtup.args, :(min($iter_leng, cld(CheapThreads.num_threads(), $reserve_per))), reserve_per)
+        il = :(div($iter_leng, $(StaticInt(minbatchsize))))
+        if reserve_per ≤ 0
+            push!(threadtup.args, :(min($il, CheapThreads.num_threads())))
+        else
+            push!(threadtup.args, :(min($il, cld(CheapThreads.num_threads(), $reserve_per))), reserve_per)
+        end
     end
     closure = Symbol("##closure##")
     args = Expr(:tuple, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))
     closureq = quote
         $closure = let
-            ($args, var"##SUBSTART##"::Int, var"##SUBSTOP##") -> begin
+            @inline ($args, var"##SUBSTART##"::Int, var"##SUBSTOP##"::Int) -> begin
                 var"##LOOPSTART##" = var"##SUBSTART##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - $(Static.One())
                 var"##LOOP_STOP##" = var"##SUBSTOP##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - $(Static.One())
                 @inbounds begin
@@ -125,14 +134,20 @@ function enclose(exorig::Expr, reserve_per = 0)
     end
     push!(q.args, esc(closureq))
     batchcall = Expr(:call, GlobalRef(CheapThreads, :batch), esc(closure), threadtup, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))
+    # batchcall = Expr(:call, esc(closure))
+    # t = Expr(:tuple, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))
     for a ∈ arguments
         push!(args.args, a)
+        # push!(t.args, esc(a))
         push!(batchcall.args, esc(a))
     end
+    # push!(batchcall.args, t, 1, iter_leng)
     push!(q.args, batchcall)
     quote
         if CheapThreads.num_threads() == 1
-            $(esc(exorig))
+            let
+                $(esc(exorig))
+            end
         else
             let
                 $q
@@ -144,7 +159,27 @@ end
 macro batch(ex)
     enclose(macroexpand(__module__, ex))
 end
-macro batch(reserve_per, ex)
-    enclose(macroexpand(__module__, ex), reserve_per)
+function interpret_kwarg(arg, reserve_per = 0, minbatch = 1)
+    a = arg.args[1]
+    v = arg.args[2]
+    if a === :reserve
+        @assert v ≥ 0
+        reserve_per = v
+    elseif a === :minbatch
+        @assert v ≥ 1
+        minbatch = v
+    else
+        throw(ArgumentError("kwarg $(a) not recognized."))
+    end
+    reserve_per, minbatch
+end
+macro batch(arg1, ex)
+    reserve, minbatch = interpret_kwarg(arg1)
+    enclose(macroexpand(__module__, ex), reserve, minbatch)
+end
+macro batch(arg1, arg2, ex)
+    reserve, minbatch = interpret_kwarg(arg1)
+    reserve, minbatch = interpret_kwarg(arg2, reserve, minbatch)
+    enclose(macroexpand(__module__, ex), reserve, minbatch)
 end
 

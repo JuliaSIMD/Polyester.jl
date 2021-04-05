@@ -31,7 +31,7 @@ function free_local_threads!()
     free_threads!(r)
 end
 
-function _request_threads(id::UInt32, num_requested::UInt32)
+@inline function _request_threads(id::UInt32, num_requested::UInt32)
     reserved_threads = reserved(id)
     reserved_count = count_ones(reserved_threads)%UInt32
     no_threads = zero(worker_type())
@@ -65,7 +65,7 @@ function _request_threads(id::UInt32, num_requested::UInt32)
     ThreadingUtilities._atomic_store!(wp, _all_threads & (~all_threads))
     return UnsignedIteratorEarlyStop(reserved_threads | all_threads, num_requested), all_threads
 end
-function request_threads(id, num_requested)
+@inline function request_threads(id, num_requested)
     _request_threads(id % UInt32, num_requested % UInt32)
 end
 reserved_threads(id) = UnsignedIteratorEarlyStop(reserved(id))

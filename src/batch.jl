@@ -28,17 +28,21 @@ end
         setup_batch!(p, fptr, argtup, start, stop)
     end
 end
+_extract_params(::Type{T}) where {T<:Tuple} = T.parameters
+_extract_params(::Type{NamedTuple{S,T}}) where {S,T<:Tuple} = T.parameters
+push_tup!(x, ::Type{T}, t) where {T<:Tuple} = push!(x,t)
+push_tup!(x, ::Type{NamedTuple{S,T}}, t) where {S,T<:Tuple} = push!(x, Expr(:call, Expr(:curly, :NamedTuple, S), t))
 
 function add_var!(q, argtup, gcpres, ::Type{T}, argtupname, gcpresname, k) where {T}
     parg_k = Symbol(argtupname, :_, k)
     garg_k = Symbol(gcpresname, :_, k)
-    if T <: Tuple
+    if (T <: Tuple) || (T <: NamedTuple)
         push!(q.args, Expr(:(=), parg_k, Expr(:ref, argtupname, k)))
         t = Expr(:tuple)
-        for (j,p) ∈ enumerate(T.parameters)
+        for (j,p) ∈ enumerate(_extract_params(T))
             add_var!(q, t, gcpres, p, parg_k, garg_k, j)
         end
-        push!(argtup.args, t)
+        push_tup!(argtup.args, T, t)
     else
         push!(q.args, Expr(:(=), Expr(:tuple, parg_k, garg_k), Expr(:call, :object_and_preserve, Expr(:ref, argtupname, k))))
         push!(argtup.args, parg_k)
@@ -48,8 +52,10 @@ end
 
 @generated function _batch_no_reserve(
     f!::F, threadmask, nthread, torelease, Nr, Nd, ulen, args::Vararg{Any,K}
-) where {F,K}
+    ) where {F,K}
+    1+2
     q = quote
+        $(Expr(:meta,:inline))
         threads = UnsignedIteratorEarlyStop(threadmask, nthread)
         Ndp = Nd + one(Nd)
     end
@@ -159,7 +165,7 @@ end
 end
 
 
-function batch(
+@inline function batch(
     f!::F, (len, nbatches)::Tuple{Vararg{Integer,2}}, args::Vararg{Any,K}
 ) where {F,K}
     threads, torelease = request_threads(Base.Threads.threadid(), nbatches - one(nbatches))
@@ -170,7 +176,6 @@ function batch(
         return
     end
     nbatch = nthread + one(nthread)
-
     Nd = Base.udiv_int(ulen, nbatch % UInt) # reasonable for `ulen` to be ≥ 2^32
     Nr = ulen - Nd * nbatch
 
