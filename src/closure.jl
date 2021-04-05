@@ -174,9 +174,6 @@ end
 #     offset = ThreadingUtilities.store!(p, args, S)
 # end
 
-@inline _range(start, step, stop) = start:step:stop
-@inline _range(start, ::StaticInt{1}, stop) = start:stop
-
 function enclose(exorig::Expr, reserve_per = 0)
     Meta.isexpr(exorig, :for, 2) || throw(ArgumentError("Expression invalid; should be a for loop."))
     ex = copy(exorig)
@@ -197,7 +194,7 @@ function enclose(exorig::Expr, reserve_per = 0)
         firstloop = firstloop.args[1]
     end
     loop = firstloop.args[2]
-    firstloop.args[2] = Expr(:call, GlobalRef(CheapThreads, :_range), loopstart, loop_step, loop_stop)
+    firstloop.args[2] = Expr(:call, GlobalRef(Base, :(:)), loopstart, loop_step, loop_stop)
     # typexpr_incomplete is missing `funcs`
     q = quote
         $loop_sym = $(esc(loop))
