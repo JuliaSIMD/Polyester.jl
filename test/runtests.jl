@@ -59,6 +59,15 @@ function issue16!(dest)
     end
     true
 end
+function issue17!(dest)
+    @assert size(dest, 1) == 5
+    @batch for j in axes(dest, 2)
+        x = ntuple(i -> i*j, Val(5)) # works if this line is commented out
+        for i in axes(dest, 1)
+            dest[i, j] = i * j
+        end
+    end
+end
 
 @testset "Range Map" begin
 
@@ -109,7 +118,10 @@ end
         @test issue15!(dest, src).src == src
         @test issue16!(dest)
     end
-    
+    let dest = zeros(5, 10_000);
+        issue17!(dest)
+        @test dest == axes(dest,1) .* axes(dest,2)'
+    end
 end
 
 @testset "start and stop values" begin
