@@ -101,7 +101,7 @@ function enclose(exorig::Expr, reserve_per = 0)
         $loop_sym = $(esc(loop))
         $iter_leng = static_length($loop_sym)
         $loop_step = CheapThreads.static_step($loop_sym)
-        $loop_offs = CheapThreads.static_first($loop_sym) - $(Static.One())
+        $loop_offs = CheapThreads.static_first($loop_sym)
     end
     threadtup = Expr(:tuple, iter_leng)
     if reserve_per ≤ 0
@@ -114,8 +114,8 @@ function enclose(exorig::Expr, reserve_per = 0)
     closureq = quote
         $closure = let
             ($args, var"##SUBSTART##"::Int, var"##SUBSTOP##") -> begin
-                var"##LOOPSTART##" = var"##SUBSTART##" * var"##LOOP_STEP##" - var"##LOOPOFFSET##"
-                var"##LOOP_STOP##" = var"##SUBSTOP##" * var"##LOOP_STEP##" - var"##LOOPOFFSET##"
+                var"##LOOPSTART##" = var"##SUBSTART##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - $(Static.One())
+                var"##LOOP_STOP##" = var"##SUBSTOP##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - $(Static.One())
                 @inbounds begin
                     $ex
                 end

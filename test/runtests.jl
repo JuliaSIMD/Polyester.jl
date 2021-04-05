@@ -68,6 +68,15 @@ function issue17!(dest)
         end
     end
 end
+function issue18!(dest)
+    @assert length(dest) == 3
+    @assert dest[1] == 1
+    @batch for i in 2:3
+        dest[i] = i
+    end
+    @test dest ≈ 1:3
+end
+
 
 @testset "Range Map" begin
 
@@ -122,6 +131,7 @@ end
         issue17!(dest)
         @test dest == axes(dest,1) .* axes(dest,2)'
     end
+    issue18!(ones(3))
 end
 
 @testset "start and stop values" begin
