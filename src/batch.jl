@@ -36,7 +36,7 @@ push_tup!(x, ::Type{NamedTuple{S,T}}, t) where {S,T<:Tuple} = push!(x, Expr(:cal
 function add_var!(q, argtup, gcpres, ::Type{T}, argtupname, gcpresname, k) where {T}
     parg_k = Symbol(argtupname, :_, k)
     garg_k = Symbol(gcpresname, :_, k)
-    if (T <: Tuple) || (T <: NamedTuple)
+    if (T <: Tuple) # || (T <: NamedTuple) # NamedTuples do currently not work in all cases, see https://github.com/JuliaSIMD/CheapThreads.jl/issues/20
         push!(q.args, Expr(:(=), parg_k, Expr(:ref, argtupname, k)))
         t = Expr(:tuple)
         for (j,p) ∈ enumerate(_extract_params(T))
@@ -48,7 +48,7 @@ function add_var!(q, argtup, gcpres, ::Type{T}, argtupname, gcpresname, k) where
         push!(argtup.args, parg_k)
         push!(gcpres.args, garg_k)
     end
-end   
+end
 
 @generated function _batch_no_reserve(
     f!::F, threadmask, nthread, torelease, Nr, Nd, ulen, args::Vararg{Any,K}
