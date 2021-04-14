@@ -140,7 +140,7 @@ end
         start_indices[Threads.threadid()] = start
         end_indices[Threads.threadid()] = stop
     end
-    
+
     start_indices = zeros(Int, num_threads())
     end_indices = zeros(Int, num_threads())
 
@@ -168,6 +168,23 @@ end
     update_text!((ts, val), start, stop) = ts.vec[start:stop] .= val
     batch(update_text!, (vec_length, num_threads()), ts, "new_val")
     @test all(ts.vec .== "new_val")
+
+
+    struct Issue20
+        values::Vector{Float64}
+    end
+
+    function issue20!(dest, cache)
+        @batch for i in eachindex(dest)
+            factor = -cache.a.values[i]
+            dest[i] *= factor
+        end
+    end
+
+    dest = ones(20)
+    cache = (; a = Issue20(ones(length(dest))))
+    issue20!(dest, cache)
+    @test all(dest .≈ -1)
 end
 
 @testset "ForwardDiff" begin
