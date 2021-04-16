@@ -20,7 +20,7 @@ function define!(defined::Set, s)
     if s isa Symbol
         push!(defined, s)
     else
-        define_tup!(defined, s)
+        define_tup!(defined, s::Expr)
     end
 end
 function define_induction_variables!(defined::Set, ex::Expr) # add `i` in `for i ∈ looprange` to `defined`
@@ -28,10 +28,10 @@ function define_induction_variables!(defined::Set, ex::Expr) # add `i` in `for i
     loops = ex.args[1]
     if loops.head === :block
         for loop ∈ loops.args
-            push!(defined, loop.args[1])
+            define!(defined, loop.args[1])
         end
     else
-        push!(defined, loops.args[1])
+        define!(defined, loops.args[1])
     end
 end
 
