@@ -18,7 +18,7 @@ include("unsignediterator.jl")
 
 # reset_workers!() = WORKERS[] = UInt128((1 << (num_threads() - 1)) - 1)
 dynamic_thread_count() = min((Sys.CPU_THREADS)::Int, Threads.nthreads())
-reset_workers!() = WORKERS[] = UInt128((1 << (dynamic_thread_count() - 1)) - 1)
+reset_workers!() = WORKERS[] = (one(UInt128) << (dynamic_thread_count() - one(UInt128))) - one(UInt128)
 function __init__()
     reset_workers!()
     resize!(STATES, dynamic_thread_count() * cache_linesize())
