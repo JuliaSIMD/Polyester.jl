@@ -77,6 +77,12 @@ function issue18!(dest)
     @test dest ≈ 1:3
 end
 
+function issue25!(dest, x, y)
+    @batch for (i,j) ∈ Iterators.product(eachindex(x), eachindex(y))
+        dest[i,j] = x[i] * y[i]
+    end
+    dest
+end
 
 @testset "Range Map" begin
 
@@ -132,6 +138,10 @@ end
         @test dest == axes(dest,1) .* axes(dest,2)'
     end
     issue18!(ones(3))
+
+    let x = rand(100), y = rand(100), dest1 = x .* y'; dest0 = similar(dest1);
+        @test_broken issue25!(dest0, x, y) ≈ dest1
+    end
 end
 
 @testset "start and stop values" begin
@@ -204,6 +214,7 @@ end
     @test dx ≈ dxref
 end
 
-println("Package tests complete. Running `Aqua` checks.")
-Aqua.test_all(CheapThreads)
-
+if VERSION ≥ v"1.6"
+  println("Package tests complete. Running `Aqua` checks.")
+  Aqua.test_all(CheapThreads)
+end
