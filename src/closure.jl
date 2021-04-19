@@ -76,6 +76,34 @@ function extractargs!(arguments::Vector{Symbol}, defined::Set, expr::Expr)
     end
 end
 
+static_literals!(s::Symbol) = s
+function static_literals!(q::Expr)
+    for (i,ex) ∈ enumerate(q.args)
+        if ex isa Integer
+            q.args[i] = StaticInt(ex)
+        elseif ex isa Expr
+            static_literals!(ex)
+        end
+    end
+    q
+end
+function maybestatic!(expr::Expr)::Expr
+    if expr.head === :call
+        f = first(expr.args)
+        if f === :length
+            expr.args[1] = static_length
+        elseif f === :size && length(expr.args) == 3
+            i = expr.args[3]
+            if i isa Integer
+                expr.args[1] = size
+                expr.args[3] = StaticInt(i)
+            end
+        else
+            static_literals!(expr)
+        end
+    end
+    esc(expr)
+end
 function enclose(exorig::Expr, reserve_per = 0, minbatchsize = 1)
     Meta.isexpr(exorig, :for, 2) || throw(ArgumentError("Expression invalid; should be a for loop."))
     ex = copy(exorig)
@@ -105,7 +133,7 @@ function enclose(exorig::Expr, reserve_per = 0, minbatchsize = 1)
     firstloop.args[2] = Expr(:call, GlobalRef(Base, :(:)), loopstart, loop_step, loop_stop)
     # typexpr_incomplete is missing `funcs`
     q = quote
-        $loop_sym = $(esc(loop))
+        $loop_sym = $(maybestatic!(loop))
         $iter_leng = static_length($loop_sym)
         $loop_step = CheapThreads.static_step($loop_sym)
         $loop_offs = CheapThreads.static_first($loop_sym)
