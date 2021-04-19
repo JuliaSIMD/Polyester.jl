@@ -69,7 +69,7 @@ function extractargs!(arguments::Vector{Symbol}, defined::Set, expr::Expr)
         define!(td, args[1])
         extractargs!(arguments, td, args[1])
         extractargs!(arguments, td, args[2])
-        return 
+        return
     end
     for i ∈ startind:length(args)
         extractargs!(arguments, defined, args[i])
@@ -88,8 +88,15 @@ function enclose(exorig::Expr, reserve_per = 0, minbatchsize = 1)
 
     arguments = Symbol[]#loop_offs, loop_step]
     defined = Set((loop_offs, loop_step));
-    extractargs!(arguments, defined, ex)
-
+    define_induction_variables!(defined, ex)
+    if ex.args[1].head === :block
+        for i ∈ 2:length(ex.args[1].args)
+            extractargs!(arguments, defined, ex.args[1].args[i])
+        end
+    end
+    for i ∈ 2:length(ex.args)
+        extractargs!(arguments, defined, ex.args[i])
+    end
     firstloop = ex.args[1]
     if firstloop.head === :block
         firstloop = firstloop.args[1]
@@ -123,8 +130,8 @@ function enclose(exorig::Expr, reserve_per = 0, minbatchsize = 1)
     closureq = quote
         $closure = let
             @inline ($args, var"##SUBSTART##"::Int, var"##SUBSTOP##"::Int) -> begin
-                var"##LOOPSTART##" = var"##SUBSTART##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - $(Static.One())
-                var"##LOOP_STOP##" = var"##SUBSTOP##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - $(Static.One())
+                var"##LOOPSTART##" = var"##SUBSTART##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - var"##LOOP_STEP##"
+                var"##LOOP_STOP##" = var"##SUBSTOP##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - var"##LOOP_STEP##"
                 @inbounds begin
                     $ex
                 end
