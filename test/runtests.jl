@@ -214,6 +214,11 @@ end
     @test dx ≈ dxref
 end
 
+@testset "Valid State" begin
+  @test all(iszero, CheapThreads.STATES)
+  @test count_ones(CheapThreads.WORKERS[]) == min(128, CheapThreads.dynamic_thread_count() - 1)
+end
+
 if VERSION ≥ v"1.6"
   println("Package tests complete. Running `Aqua` checks.")
   Aqua.test_all(CheapThreads)

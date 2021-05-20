@@ -24,11 +24,12 @@ function free_threads!(freed_threads)
     nothing
 end
 function free_local_threads!()
-    tid = Base.Threads.threadid()
-    tmask = one(worker_type()) << (tid - one(tid))
-    r = reserved(tid) | tmask
-    reserve_threads!(tid, zero(worker_type()))
-    free_threads!(r)
+  tid = Base.Threads.threadid()
+  tid -= one(tid)
+  tmask = one(worker_type()) << (tid - one(tid))
+  r = reserved(tid) | tmask
+  reserve_threads!(tid, zero(worker_type()))
+  free_threads!(r)
 end
 
 @inline function _request_threads(id::UInt32, num_requested::UInt32)
@@ -57,7 +58,6 @@ end
         masked = (all_threads & m) ⊻ all_threads
         excess -= count_ones(masked)
         all_threads &= (~masked)
-        # @show bitstring(masked), count_ones(masked), bitstring(unused_threads), excess, lz, bitstring(all_threads)
         excess == 0 && break
         # i -= 1
         # @assert i > 0
