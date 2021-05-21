@@ -1,16 +1,16 @@
-using CheapThreads
+using Polyester
 using Documenter
 
-DocMeta.setdocmeta!(CheapThreads, :DocTestSetup, :(using CheapThreads); recursive=true)
+DocMeta.setdocmeta!(Polyester, :DocTestSetup, :(using Polyester); recursive=true)
 
 makedocs(;
-    modules=[CheapThreads],
+    modules=[Polyester],
     authors="Chris Elrod <elrodc@gmail.com> and contributors",
-    repo="https://github.com/JuliaSIMD/CheapThreads.jl/blob/{commit}{path}#{line}",
-    sitename="CheapThreads.jl",
+    repo="https://github.com/JuliaSIMD/Polyester.jl/blob/{commit}{path}#{line}",
+    sitename="Polyester.jl",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://JuliaSIMD.github.io/CheapThreads.jl",
+        canonical="https://JuliaSIMD.github.io/Polyester.jl",
         assets=String[],
     ),
     pages=[
@@ -19,5 +19,5 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/JuliaSIMD/CheapThreads.jl",
+    repo="github.com/JuliaSIMD/Polyester.jl",
 )

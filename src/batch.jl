@@ -36,7 +36,7 @@ push_tup!(x, ::Type{NamedTuple{S,T}}, t) where {S,T<:Tuple} = push!(x, Expr(:cal
 function add_var!(q, argtup, gcpres, ::Type{T}, argtupname, gcpresname, k) where {T}
     parg_k = Symbol(argtupname, :_, k)
     garg_k = Symbol(gcpresname, :_, k)
-    if (T <: Tuple) # || (T <: NamedTuple) # NamedTuples do currently not work in all cases, see https://github.com/JuliaSIMD/CheapThreads.jl/issues/20
+    if (T <: Tuple) # || (T <: NamedTuple) # NamedTuples do currently not work in all cases, see https://github.com/JuliaSIMD/Polyester.jl/issues/20
         push!(q.args, Expr(:(=), parg_k, Expr(:ref, argtupname, k)))
         t = Expr(:tuple)
         for (j,p) ∈ enumerate(_extract_params(T))

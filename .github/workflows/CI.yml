@@ -59,9 +59,9 @@ jobs:
       - run: |
           julia --project=docs -e '
             using Documenter: DocMeta, doctest
-            using CheapThreads
-            DocMeta.setdocmeta!(CheapThreads, :DocTestSetup, :(using CheapThreads); recursive=true)
-            doctest(CheapThreads)'
+            using Polyester
+            DocMeta.setdocmeta!(Polyester, :DocTestSetup, :(using Polyester); recursive=true)
+            doctest(Polyester)'
       - run: julia --project=docs docs/make.jl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

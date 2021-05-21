@@ -135,22 +135,22 @@ function enclose(exorig::Expr, reserve_per = 0, minbatchsize = 1)
     q = quote
         $loop_sym = $(maybestatic!(loop))
         $iter_leng = static_length($loop_sym)
-        $loop_step = CheapThreads.static_step($loop_sym)
-        $loop_offs = CheapThreads.static_first($loop_sym)
+        $loop_step = $static_step($loop_sym)
+        $loop_offs = $static_first($loop_sym)
     end
     threadtup = Expr(:tuple, iter_leng)
     if minbatchsize ≤ 1
         if reserve_per ≤ 0
-            push!(threadtup.args, :(min($iter_leng, CheapThreads.num_threads())))
+            push!(threadtup.args, :(min($iter_leng, $num_threads())))
         else
-            push!(threadtup.args, :(min($iter_leng, cld(CheapThreads.num_threads(), $reserve_per))), reserve_per)
+            push!(threadtup.args, :(min($iter_leng, cld($num_threads(), $reserve_per))), reserve_per)
         end
     else
         il = :(div($iter_leng, $(StaticInt(minbatchsize))))
         if reserve_per ≤ 0
-            push!(threadtup.args, :(min($il, CheapThreads.num_threads())))
+            push!(threadtup.args, :(min($il, $num_threads())))
         else
-            push!(threadtup.args, :(min($il, cld(CheapThreads.num_threads(), $reserve_per))), reserve_per)
+            push!(threadtup.args, :(min($il, cld($num_threads(), $reserve_per))), reserve_per)
         end
     end
     closure = Symbol("##closure##")
@@ -168,18 +168,14 @@ function enclose(exorig::Expr, reserve_per = 0, minbatchsize = 1)
         end
     end
     push!(q.args, esc(closureq))
-    batchcall = Expr(:call, GlobalRef(CheapThreads, :batch), esc(closure), threadtup, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))
-    # batchcall = Expr(:call, esc(closure))
-    # t = Expr(:tuple, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))
+    batchcall = Expr(:call, batch, esc(closure), threadtup, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))
     for a ∈ arguments
         push!(args.args, a)
-        # push!(t.args, esc(a))
         push!(batchcall.args, esc(a))
     end
-    # push!(batchcall.args, t, 1, iter_leng)
     push!(q.args, batchcall)
     quote
-        if CheapThreads.num_threads() == 1
+        if $num_threads() == 1
             let
                 $(esc(exorig))
             end

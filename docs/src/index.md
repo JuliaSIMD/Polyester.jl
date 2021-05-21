@@ -1,12 +1,12 @@
 ```@meta
-CurrentModule = CheapThreads
+CurrentModule = Polyester
 ```
 
-# CheapThreads
+# Polyester
 
 ```@index
 ```
 
 ```@autodocs
-Modules = [CheapThreads]
+Modules = [Polyester]
 ```

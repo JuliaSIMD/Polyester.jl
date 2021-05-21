@@ -1,4 +1,4 @@
-module CheapThreads
+module Polyester
 
 using ThreadingUtilities, VectorizationBase
 using ArrayInterface: static_length, static_step, static_first, size

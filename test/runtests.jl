@@ -1,5 +1,5 @@
 println("Starting tests with $(Threads.nthreads()) threads out of `Sys.CPU_THREADS = $(Sys.CPU_THREADS)`...")
-using CheapThreads, Aqua, ForwardDiff
+using Polyester, Aqua, ForwardDiff
 using Test
 
 function bsin!(y,x)
@@ -203,23 +203,23 @@ end
     dx = similar(x);
     f(x) = -sum(sum ∘ sincos, x)
     println("Running threaded ForwardDiff test...")
-    CheapThreads.threaded_gradient!(f, dx, x, ForwardDiff.Chunk(8));
+    Polyester.threaded_gradient!(f, dx, x, ForwardDiff.Chunk(8));
     ForwardDiff.gradient!(dxref, f, x, ForwardDiff.GradientConfig(f, x, ForwardDiff.Chunk(8), nothing));
     @test dx == dxref
 
     dx .= NaN;
     batch((length(x), max(1,num_threads()>>1), 2), dx, x) do (dx,x), start, stop
-        CheapThreads.threaded_gradient!(f, view(dx, start%Int:stop%Int), view(x, start%Int:stop%Int), ForwardDiff.Chunk(8))
+        Polyester.threaded_gradient!(f, view(dx, start%Int:stop%Int), view(x, start%Int:stop%Int), ForwardDiff.Chunk(8))
     end;
     @test dx ≈ dxref
 end
 
 @testset "Valid State" begin
-  @test all(iszero, CheapThreads.STATES)
-  @test count_ones(CheapThreads.WORKERS[]) == min(128, CheapThreads.dynamic_thread_count() - 1)
+  @test all(iszero, Polyester.STATES)
+  @test count_ones(Polyester.WORKERS[]) == min(128, Polyester.dynamic_thread_count() - 1)
 end
 
 if VERSION ≥ v"1.6"
   println("Package tests complete. Running `Aqua` checks.")
-  Aqua.test_all(CheapThreads)
+  Aqua.test_all(Polyester)
 end
