@@ -407,3 +407,8 @@ By reducing the length of the vectors by just 1/3 (4000 -> 3000), we saw over a 
 `minbatch=2000`, by also using only a single thread was able to match its performance. Thus, something around
 `minbatch=2000` seems like the best choice for this particular function on this particular CPU.
 
+
+Note that `@batch` defaults to using up to one thread per physical core, instead of 1 thread per CPU thread. This
+is because [LoopVectorization.jl](https://github.com/JuliaSIMD/LoopVectorization.jl) currently only uses up to 1 thread per physical core, and switching the number of
+threads incurs some overhead. See the docstring on `@batch` (i.e., `?@batch` in a Julia REPL) for some more discussion.
+

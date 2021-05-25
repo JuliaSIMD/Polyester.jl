@@ -191,6 +191,37 @@ function enclose(exorig::Expr, reserve_per = 0, minbatchsize = 1, per::Symbol = 
     end
 end
 
+"""
+    @batch for i in Iter; ...; end
+
+Evaluate the loop on multiple threads.
+
+    @batch minbatch=N for i in Iter; ...; end
+
+Evaluate at least N iterations per thread. Will use at most `length(Iter) ÷ N` threads.
+
+    @batch per=core for i in Iter; ...; end
+    @batch per=thread for i in Iter; ...; end
+
+Use at most 1 thread per physical core, or 1 thread per CPU thread, respectively.
+One thread per core will mean less threads competing for the cache, while (for example) if
+there are two hardware threads per physical core, then using each thread means that there
+are two independent instruction streams feeding the CPU's execution units. When one of
+these streams isn't enough to make the most of out of order execution, this could increase
+total throughput.
+
+Which performs better will depend on the workload, so if you're not sure it may be worth
+benchmarking both.
+
+LoopVectorization.jl currently only uses up to 1 thread per physical core. Because there
+is some overhead to switching the number of threads used, `per=core` is `@batch`'s default,
+so that `Polyester.@batch` and `LoopVectorization.@tturbo` work well together by default.
+
+You can pass both `per=(core/thread)` and `minbatch=N` options at the same time, e.g.
+
+    @batch per=thread minbatch=2000 for i in Iter; ...; end
+    @batch minbatch=5000 per=core   for i in Iter; ...; end
+"""
 macro batch(ex)
     enclose(macroexpand(__module__, ex))
 end
