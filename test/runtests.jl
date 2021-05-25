@@ -3,17 +3,27 @@ using Polyester, Aqua, ForwardDiff
 using Test
 
 function bsin!(y,x)
-    @batch for i ∈ eachindex(y,x)
-        y[i] = sin(x[i])
-    end
+  @batch for i ∈ eachindex(y,x)
+    y[i] = sin(x[i])
+  end
+  return y
+end
+function bcos!(y,x)
+  @batch per=core for i ∈ eachindex(y,x)
+    y[i] = cos(x[i])
+  end
+  return y
 end
 myindices(x) = 1:length(x) # test hygiene, issue #11
 function sin_batch_sum(v)
-    s = zeros(8,Threads.nthreads())
-    @batch for i = myindices(v)
-        s[1,Threads.threadid()] += sin(v[i])
-    end
-    return sum(view(s, 1, :))
+  s = zeros(8,Threads.nthreads())
+  @batch minbatch=10 for i = myindices(v)
+    s[1,Threads.threadid()] += sin(v[i])
+  end
+  if cld(length(v), 10) < Threads.nthreads()
+    @test s[1,end] == 0.0
+  end
+  return sum(view(s, 1, :))
 end
 function rowsum_batch!(x, A)
     @batch for n ∈ axes(A,2)
@@ -118,10 +128,11 @@ end
     @test slow_cheap(1000, "9") ≈ slow_single_thread(1000,"9")
 
     x = randn(100_000); y = similar(x);
-    bsin!(y, x)
-    @test y == sin.(x)
+    @test bsin!(y, x) == sin.(x)
+    @test bcos!(y, x) == cos.(x)
     @test sum(sin,x) ≈ sin_batch_sum(x)
-
+    @test sum(sin,1:9) ≈ sin_batch_sum(1:9)
+  
     A = rand(200,300); x = Vector{Float64}(undef, 300);
     rowsum_batch!(x, A);
     @test x ≈ vec(sum(A,dims=1))
@@ -147,16 +158,17 @@ end
 @testset "start and stop values" begin
     println("Running start and stop values tests...")
     function record_start_stop!((start_indices, end_indices), start, stop)
-        start_indices[Threads.threadid()] = start
-        end_indices[Threads.threadid()] = stop
+      start_indices[Threads.threadid()] = start
+      end_indices[Threads.threadid()] = stop
+      sleep(1) # if task completes two quickly, the mainthread will start stealing work back.
     end
 
-    start_indices = zeros(Int, num_threads())
-    end_indices = zeros(Int, num_threads())
+    start_indices = zeros(Int, num_threads());
+    end_indices = zeros(Int, num_threads());
 
     for range in [Int(num_threads()), 1000, 1001]
-        start_indices .= 0
-        end_indices .= 0
+        start_indices .= 0;
+        end_indices .= 0;
         batch(record_start_stop!, (range, num_threads()), start_indices, end_indices)
         indices_test_per_thread = end_indices .- start_indices .+ 1
         acceptable_no_per_thread = [fld(range,num_threads()), cld(range,num_threads())]

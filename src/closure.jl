@@ -104,7 +104,7 @@ function maybestatic!(expr::Expr)::Expr
     end
     esc(expr)
 end
-function enclose(exorig::Expr, reserve_per = 0, minbatchsize = 1)
+function enclose(exorig::Expr, reserve_per = 0, minbatchsize = 1, per::Symbol = :core)
     Meta.isexpr(exorig, :for, 2) || throw(ArgumentError("Expression invalid; should be a for loop."))
     ex = copy(exorig)
     loop_sym = Symbol("##LOOP##")
@@ -139,18 +139,22 @@ function enclose(exorig::Expr, reserve_per = 0, minbatchsize = 1)
         $loop_offs = $static_first($loop_sym)
     end
     threadtup = Expr(:tuple, iter_leng)
+    num_thread_expr = Expr(:call, num_threads)
+    if per === :core
+        num_thread_expr = Expr(:call, min, num_thread_expr, Expr(:call, num_cores))
+    end
     if minbatchsize ≤ 1
         if reserve_per ≤ 0
-            push!(threadtup.args, :(min($iter_leng, $num_threads())))
+            push!(threadtup.args, :(min($iter_leng, $num_thread_expr)))
         else
-            push!(threadtup.args, :(min($iter_leng, cld($num_threads(), $reserve_per))), reserve_per)
+            push!(threadtup.args, :(min($iter_leng, cld($num_thread_expr, $reserve_per))), reserve_per)
         end
     else
-        il = :(div($iter_leng, $(StaticInt(minbatchsize))))
+        il = :(div($iter_leng, $(minbatchsize isa Int ? StaticInt(minbatchsize) : minbatchsize)))
         if reserve_per ≤ 0
-            push!(threadtup.args, :(min($il, $num_threads())))
+            push!(threadtup.args, :(min($il, $num_thread_expr)))
         else
-            push!(threadtup.args, :(min($il, cld($num_threads(), $reserve_per))), reserve_per)
+            push!(threadtup.args, :(min($il, cld($num_thread_expr, $reserve_per))), reserve_per)
         end
     end
     closure = Symbol("##closure##")
@@ -190,27 +194,36 @@ end
 macro batch(ex)
     enclose(macroexpand(__module__, ex))
 end
-function interpret_kwarg(arg, reserve_per = 0, minbatch = 1)
-    a = arg.args[1]
-    v = arg.args[2]
-    if a === :reserve
-        @assert v ≥ 0
-        reserve_per = v
-    elseif a === :minbatch
-        @assert v ≥ 1
-        minbatch = v
-    else
-        throw(ArgumentError("kwarg $(a) not recognized."))
-    end
-    reserve_per, minbatch
+function interpret_kwarg(arg, reserve_per = 0, minbatch = 1, per = :core)
+  a = arg.args[1]
+  v = arg.args[2]
+  if a === :reserve
+    @assert v ≥ 0
+    reserve_per = v
+  elseif a === :minbatch
+    @assert v ≥ 1
+    minbatch = v
+  elseif a === :per
+    per = v::Symbol
+    @assert (per === :core) | (per === :thread)
+  else
+    throw(ArgumentError("kwarg $(a) not recognized."))
+  end
+  reserve_per, minbatch, per
 end
 macro batch(arg1, ex)
-    reserve, minbatch = interpret_kwarg(arg1)
-    enclose(macroexpand(__module__, ex), reserve, minbatch)
+    reserve, minbatch, per = interpret_kwarg(arg1)
+    enclose(macroexpand(__module__, ex), reserve, minbatch, per)
 end
 macro batch(arg1, arg2, ex)
-    reserve, minbatch = interpret_kwarg(arg1)
-    reserve, minbatch = interpret_kwarg(arg2, reserve, minbatch)
-    enclose(macroexpand(__module__, ex), reserve, minbatch)
+    reserve, minbatch, per = interpret_kwarg(arg1)
+    reserve, minbatch, per = interpret_kwarg(arg2, reserve, minbatch, per)
+    enclose(macroexpand(__module__, ex), reserve, minbatch, per)
+end
+macro batch(arg1, arg2, arg3, ex)
+    reserve, minbatch, per = interpret_kwarg(arg1)
+    reserve, minbatch, per = interpret_kwarg(arg2, reserve, minbatch, per)
+    reserve, minbatch, per = interpret_kwarg(arg2, reserve, minbatch, per)
+    enclose(macroexpand(__module__, ex), reserve, minbatch, per)
 end
 
