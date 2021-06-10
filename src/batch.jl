@@ -76,7 +76,7 @@ end
       start = stop
       i == nthread && break
     end
-    f!(map(dereference, argtup), (start+one(UInt)) % Int, ulen % Int)
+    f!(argtup, (start+one(UInt)) % Int, ulen % Int)
     tm = mask(threads)
     tid = 0x00000000
     while true
@@ -153,7 +153,7 @@ end
       reserved_threads |= (one(reserved_threads) << (tid - one(tid)))
     end
     reserve_threads!(0x00000000, reserved_threads)
-    f!(map(dereference, argtup), (start+one(UInt)) % Int, ulen % Int)
+    f!(argtup, (start+one(UInt)) % Int, ulen % Int)
     free_threads!(reserved_threads)
     reserve_threads!(0x00000000, zero(worker_type()))
     tid = 0x00000000
