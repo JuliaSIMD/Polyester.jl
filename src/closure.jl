@@ -143,14 +143,14 @@ function enclose(exorig::Expr, reserve_per = 0, minbatchsize = 1, per::Symbol = 
     if per === :core
         num_thread_expr = Expr(:call, min, num_thread_expr, Expr(:call, num_cores))
     end
-    if minbatchsize ≤ 1
+    if minbatchsize isa Integer && minbatchsize ≤ 1
         if reserve_per ≤ 0
             push!(threadtup.args, :(min($iter_leng, $num_thread_expr)))
         else
             push!(threadtup.args, :(min($iter_leng, cld($num_thread_expr, $reserve_per))), reserve_per)
         end
     else
-        il = :(div($iter_leng, $(minbatchsize isa Int ? StaticInt(minbatchsize) : minbatchsize)))
+        il = :(div($iter_leng, $(minbatchsize isa Int ? StaticInt(minbatchsize) : esc(minbatchsize))))
         if reserve_per ≤ 0
             push!(threadtup.args, :(min($il, $num_thread_expr)))
         else
@@ -232,7 +232,6 @@ function interpret_kwarg(arg, reserve_per = 0, minbatch = 1, per = :core)
     @assert v ≥ 0
     reserve_per = v
   elseif a === :minbatch
-    @assert v ≥ 1
     minbatch = v
   elseif a === :per
     per = v::Symbol
