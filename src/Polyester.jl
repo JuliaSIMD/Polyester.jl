@@ -4,6 +4,7 @@ using ThreadingUtilities, VectorizationBase
 using ArrayInterface: static_length, static_step, static_first, size
 using VectorizationBase: num_threads, num_cores, cache_linesize, __vload, __vstore!, register_size, False
 using StrideArraysCore: object_and_preserve
+using ManualMemory: dereference
 import IfElse
 using Static
 using Requires

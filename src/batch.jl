@@ -1,32 +1,32 @@
 struct BatchClosure{F, A, B}
-    f::F
+  f::F
 end
 function (b::BatchClosure{F,A,B})(p::Ptr{UInt}) where {F,A,B}
-    (offset, args) = ThreadingUtilities.load(p, A, 2*sizeof(UInt))
-    (offset, start) = ThreadingUtilities.load(p, UInt, offset)
-    (offset, stop ) = ThreadingUtilities.load(p, UInt, offset)
-    b.f(args, (start+one(UInt))%Int, stop%Int)
-    B && free_local_threads!()
-    nothing
+  (offset, args) = ThreadingUtilities.load(p, A, 2*sizeof(UInt))
+  (offset, start) = ThreadingUtilities.load(p, UInt, offset)
+  (offset, stop ) = ThreadingUtilities.load(p, UInt, offset)
+  b.f(args, (start+one(UInt))%Int, stop%Int)
+  B && free_local_threads!()
+  nothing
 end
 
 @inline function batch_closure(f::F, args::A, ::Val{B}) where {F,A,B}
-    bc = BatchClosure{F,A,B}(f)
-    @cfunction($bc, Cvoid, (Ptr{UInt},))
+  bc = BatchClosure{F,A,B}(f)
+  @cfunction($bc, Cvoid, (Ptr{UInt},))
 end
 
 @inline function setup_batch!(p::Ptr{UInt}, fptr::Ptr{Cvoid}, argtup, start::UInt, stop::UInt)
-    offset = ThreadingUtilities.store!(p, fptr, sizeof(UInt))
-    offset = ThreadingUtilities.store!(p, argtup, offset)
-    offset = ThreadingUtilities.store!(p, start, offset)
-    offset = ThreadingUtilities.store!(p, stop, offset)
-    nothing
+  offset = ThreadingUtilities.store!(p, fptr, sizeof(UInt))
+  offset = ThreadingUtilities.store!(p, argtup, offset)
+  offset = ThreadingUtilities.store!(p, start, offset)
+  offset = ThreadingUtilities.store!(p, stop, offset)
+  nothing
 end
 @inline function launch_batched_thread!(cfunc, tid, argtup, start, stop)
-    fptr = Base.unsafe_convert(Ptr{Cvoid}, cfunc)
-    ThreadingUtilities.launch(tid, fptr, argtup, start, stop) do p, fptr, argtup, start, stop
-        setup_batch!(p, fptr, argtup, start, stop)
-    end
+  fptr = Base.unsafe_convert(Ptr{Cvoid}, cfunc)
+  ThreadingUtilities.launch(tid, fptr, argtup, start, stop) do p, fptr, argtup, start, stop
+    setup_batch!(p, fptr, argtup, start, stop)
+  end
 end
 _extract_params(::Type{T}) where {T<:Tuple} = T.parameters
 _extract_params(::Type{NamedTuple{S,T}}) where {S,T<:Tuple} = T.parameters
@@ -34,25 +34,25 @@ push_tup!(x, ::Type{T}, t) where {T<:Tuple} = push!(x,t)
 push_tup!(x, ::Type{NamedTuple{S,T}}, t) where {S,T<:Tuple} = push!(x, Expr(:call, Expr(:curly, :NamedTuple, S), t))
 
 function add_var!(q, argtup, gcpres, ::Type{T}, argtupname, gcpresname, k) where {T}
-    parg_k = Symbol(argtupname, :_, k)
-    garg_k = Symbol(gcpresname, :_, k)
-    if (T <: Tuple) # || (T <: NamedTuple) # NamedTuples do currently not work in all cases, see https://github.com/JuliaSIMD/Polyester.jl/issues/20
-        push!(q.args, Expr(:(=), parg_k, Expr(:ref, argtupname, k)))
-        t = Expr(:tuple)
-        for (j,p) ∈ enumerate(_extract_params(T))
-            add_var!(q, t, gcpres, p, parg_k, garg_k, j)
-        end
-        push_tup!(argtup.args, T, t)
-    else
-        push!(q.args, Expr(:(=), Expr(:tuple, parg_k, garg_k), Expr(:call, :object_and_preserve, Expr(:ref, argtupname, k))))
-        push!(argtup.args, parg_k)
-        push!(gcpres.args, garg_k)
+  parg_k = Symbol(argtupname, :_, k)
+  garg_k = Symbol(gcpresname, :_, k)
+  if (T <: Tuple) # || (T <: NamedTuple) # NamedTuples do currently not work in all cases, see https://github.com/JuliaSIMD/Polyester.jl/issues/20
+    push!(q.args, Expr(:(=), parg_k, Expr(:ref, argtupname, k)))
+    t = Expr(:tuple)
+    for (j,p) ∈ enumerate(_extract_params(T))
+      add_var!(q, t, gcpres, p, parg_k, garg_k, j)
     end
+    push_tup!(argtup.args, T, t)
+  else
+    push!(q.args, Expr(:(=), Expr(:tuple, parg_k, garg_k), Expr(:call, :object_and_preserve, Expr(:ref, argtupname, k))))
+    push!(argtup.args, parg_k)
+    push!(gcpres.args, garg_k)
+  end
 end
 
 @generated function _batch_no_reserve(
-    f!::F, threadmask, nthread, torelease, Nr, Nd, ulen, args::Vararg{Any,K}
-    ) where {F,K}
+  f!::F, threadmask, nthread, torelease, Nr, Nd, ulen, args::Vararg{Any,K}
+) where {F,K}
   q = quote
     $(Expr(:meta,:inline))
     threads = UnsignedIteratorEarlyStop(threadmask, nthread)
@@ -75,7 +75,7 @@ end
       start = stop
       i == nthread && break
     end
-    f!(argtup, (start+one(UInt)) % Int, ulen % Int)
+    f!(map(dereference, argtup), (start+one(UInt)) % Int, ulen % Int)
     tm = mask(threads)
     tid = 0x00000000
     while true
@@ -152,7 +152,7 @@ end
       reserved_threads |= (one(reserved_threads) << (tid - one(tid)))
     end
     reserve_threads!(0x00000000, reserved_threads)
-    f!(argtup, (start+one(UInt)) % Int, ulen % Int)
+    f!(map(dereference, argtup), (start+one(UInt)) % Int, ulen % Int)
     free_threads!(reserved_threads)
     reserve_threads!(0x00000000, zero(worker_type()))
     tid = 0x00000000
