@@ -17,6 +17,7 @@ jobs:
         threads:
           - '5'
         arch:
+          - x86
           - x64
     steps:
       - uses: actions/checkout@v2

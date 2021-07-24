@@ -89,7 +89,7 @@ end
 end
 function Base.show(io::IO, u::UnsignedIteratorEarlyStop)
     l = length(u)
-    s = Vector{Int32}(undef, l)
+    s = Vector{Int}(undef, l)
     if l > 0
         s .= last.(u)
     end
