@@ -1,4 +1,3 @@
-
 struct UnsignedIterator{U}
     u::U
 end
@@ -66,23 +65,27 @@ Base.eltype(::UnsignedIteratorEarlyStop) = Tuple{UInt32,UInt32}
 Base.length(u::UnsignedIteratorEarlyStop) = getfield(u, :i)
 Base.size(u::UnsignedIteratorEarlyStop) = (getfield(u, :i),)
 
-function initial_state(u::UnsignedIteratorEarlyStop)
-    # LLVM should figure this out if you check?
-    VectorizationBase.assume(0x00000000 ≠ u.i)
-    (0x00000000,0x00000000,u.u)
+@inline function initial_state(u::UnsignedIteratorEarlyStop)
+  # LLVM should figure this out if you check?
+  VectorizationBase.assume(0x00000000 ≠ u.i)
+  (0x00000000,u.u)
 end
-@inline function Base.iterate(u::UnsignedIteratorEarlyStop, (i,j,uu) = initial_state(u))
-    # VectorizationBase.assume(u.i ≤ 0x00000020)
-    # VectorizationBase.assume(j ≤ count_ones(uu))
-    # iszero(j) && return nothing
-    j == u.i && return nothing
-    VectorizationBase.assume(uu ≠ zero(uu))
-    j += 0x00000001
-    tz = trailing_zeros(uu) % UInt32
-    tz += 0x00000001
-    i += tz
-    uu >>>= tz
-    ((j,i), (i,j,uu))
+@inline function iter(i, uu)
+  VectorizationBase.assume(uu ≠ zero(uu))
+  tz = trailing_zeros(uu) % UInt32
+  tz += 0x00000001
+  i += tz
+  uu >>>= tz
+  i, uu
+end
+@inline function Base.iterate(u::UnsignedIteratorEarlyStop, ((i,uu),j) = (initial_state(u),0x00000000))
+  # VectorizationBase.assume(u.i ≤ 0x00000020)
+  # VectorizationBase.assume(j ≤ count_ones(uu))
+  # iszero(j) && return nothing
+  j == u.i && return nothing
+  j += 0x00000001
+  i, uu = iter(i, uu)
+  ((j, i), (i, j, uu))
 end
 function Base.show(io::IO, u::UnsignedIteratorEarlyStop)
     l = length(u)
@@ -101,4 +104,3 @@ end
 #     uu >>>= tz
 #     (i, (i,uu))
 # end
-
