@@ -85,7 +85,7 @@ end
   j == u.i && return nothing
   j += 0x00000001
   i, uu = iter(i, uu)
-  ((j, i), (i, j, uu))
+  ((j, i), ((i, uu), j))
 end
 function Base.show(io::IO, u::UnsignedIteratorEarlyStop)
     l = length(u)
