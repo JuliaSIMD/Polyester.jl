@@ -1,7 +1,7 @@
 
-extractargs!(arguments::Vector{Symbol}, defined::Set, sym) = nothing
-function extractargs!(arguments::Vector{Symbol}, defined::Set, sym::Symbol)
-  if (sym ∉ defined) && sym ∉ (:nothing, :(+), :(*), :(-), :(/), :(÷), :(<<), :(>>), :(>>>), :zero, :one)
+extractargs!(arguments::Vector{Symbol}, defined::Set, sym, mod) = nothing
+function extractargs!(arguments::Vector{Symbol}, defined::Set, sym::Symbol, mod)
+  if ((sym ∉ defined) && sym ∉ (:nothing, :(+), :(*), :(-), :(/), :(÷), :(<<), :(>>), :(>>>), :zero, :one)) && !Base.isdefined(mod, sym)
     push!(defined, sym)
     push!(arguments, sym)
   end
@@ -45,12 +45,13 @@ function depends_on_defined(defined::Set, f::Expr)::Bool
   end
   false
 end
-function extractargs!(arguments::Vector{Symbol}, defined::Set, expr::Expr)
+function extractargs!(arguments::Vector{Symbol}, defined::Set, expr::Expr, mod)
   define_induction_variables!(defined, expr)
   head = expr.head
   args = expr.args
   startind = 1
   if head === :call
+    # (length(args) === 3) && args[1] === 
     startind = 2
   elseif head === :(=)
     arg1 = first(args)
@@ -62,17 +63,17 @@ function extractargs!(arguments::Vector{Symbol}, defined::Set, expr::Expr)
   elseif head ∈ (:inbounds, :loopinfo)#, :(->))
     return
   elseif head === :(.)
-    extractargs!(arguments, defined, args[1])
+    extractargs!(arguments, defined, args[1], mod)
     return
   elseif head === :(->)
     td = copy(defined)
     define!(td, args[1])
-    extractargs!(arguments, td, args[1])
-    extractargs!(arguments, td, args[2])
+    extractargs!(arguments, td, args[1], mod)
+    extractargs!(arguments, td, args[2], mod)
     return
   end
   for i ∈ startind:length(args)
-    extractargs!(arguments, defined, args[i])
+    extractargs!(arguments, defined, args[i], mod)
   end
 end
 
@@ -104,7 +105,7 @@ function maybestatic!(expr::Expr)::Expr
   end
   esc(expr)
 end
-function enclose(exorig::Expr, reserve_per = 0, minbatchsize = 1, per::Symbol = :core)
+function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
   Meta.isexpr(exorig, :for, 2) || throw(ArgumentError("Expression invalid; should be a for loop."))
   ex = copy(exorig)
   loop_sym = Symbol("##LOOP##")
@@ -119,11 +120,11 @@ function enclose(exorig::Expr, reserve_per = 0, minbatchsize = 1, per::Symbol = 
   define_induction_variables!(defined, ex)
   if ex.args[1].head === :block
     for i ∈ 2:length(ex.args[1].args)
-      extractargs!(arguments, defined, ex.args[1].args[i])
+      extractargs!(arguments, defined, ex.args[1].args[i], mod)
     end
   end
   for i ∈ 2:length(ex.args)
-    extractargs!(arguments, defined, ex.args[i])
+    extractargs!(arguments, defined, ex.args[i], mod)
   end
   firstloop = ex.args[1]
   if firstloop.head === :block
@@ -223,7 +224,7 @@ You can pass both `per=(core/thread)` and `minbatch=N` options at the same time,
     @batch minbatch=5000 per=core   for i in Iter; ...; end
 """
 macro batch(ex)
-  enclose(macroexpand(__module__, ex))
+  enclose(macroexpand(__module__, ex), 0, 1, :core, __module__)
 end
 function interpret_kwarg(arg, reserve_per = 0, minbatch = 1, per = :core)
   a = arg.args[1]
@@ -243,17 +244,17 @@ function interpret_kwarg(arg, reserve_per = 0, minbatch = 1, per = :core)
 end
 macro batch(arg1, ex)
   reserve, minbatch, per = interpret_kwarg(arg1)
-  enclose(macroexpand(__module__, ex), reserve, minbatch, per)
+  enclose(macroexpand(__module__, ex), reserve, minbatch, per, __module__)
 end
 macro batch(arg1, arg2, ex)
   reserve, minbatch, per = interpret_kwarg(arg1)
   reserve, minbatch, per = interpret_kwarg(arg2, reserve, minbatch, per)
-  enclose(macroexpand(__module__, ex), reserve, minbatch, per)
+  enclose(macroexpand(__module__, ex), reserve, minbatch, per, __module__)
 end
 macro batch(arg1, arg2, arg3, ex)
   reserve, minbatch, per = interpret_kwarg(arg1)
   reserve, minbatch, per = interpret_kwarg(arg2, reserve, minbatch, per)
   reserve, minbatch, per = interpret_kwarg(arg2, reserve, minbatch, per)
-  enclose(macroexpand(__module__, ex), reserve, minbatch, per)
+  enclose(macroexpand(__module__, ex), reserve, minbatch, per, __module__)
 end
 
