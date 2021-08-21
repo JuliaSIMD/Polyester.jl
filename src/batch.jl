@@ -50,44 +50,52 @@ function add_var!(q, argtup, gcpres, ::Type{T}, argtupname, gcpresname, k) where
   end
 end
 @generated function _batch_no_reserve(
-  f!::F, threadmask, nthread, torelease, Nr, Nd, ulen, args::Vararg{Any,K}
+  f!::F, threadmask_tuple, nthread_tuple, torelease_tuple, Nr, Nd, ulen, args::Vararg{Any,K}
 ) where {F,K}
   q = quote
     $(Expr(:meta,:inline))
-    threads = UnsignedIteratorEarlyStop(threadmask, nthread)
+    # threads = UnsignedIteratorEarlyStop(threadmask, nthread)
+    # threads_tuple = map(UnsignedIteratorEarlyStop, threadmask_tuple, nthread_tuple)
+    # nthread_total = sum(nthread_tuple)
     Ndp = Nd + one(Nd)
   end
   block = quote
     start = zero(UInt)
-    i = 0x00000000
     tid = 0x00000000
-    tm = mask(threads)
-    while true
-      VectorizationBase.assume(tm ≠ zero(tm))
-      tz = trailing_zeros(tm) % UInt32
-      stop = start + ifelse(i < Nr, Ndp, Nd)
-      i += 0x00000001
-      tz += 0x00000001
-      tid += tz
-      tm >>>= tz
-      launch_batched_thread!(cfunc, tid, argtup, start, stop)
-      start = stop
-      i == nthread && break
+    i = 0x00000000
+    _nthread = zero(first(nthread_tuple))
+    for (threadmask, nthread) ∈ zip(threadmask_tuple, nthread_tuple)
+      tm = mask(UnsignedIteratorEarlyStop(threadmask, nthread))
+      _nthread += nthread
+      while true
+        VectorizationBase.assume(tm ≠ zero(tm))
+        tz = trailing_zeros(tm) % UInt32
+        stop = start + ifelse(i < Nr, Ndp, Nd)
+        i += 0x00000001
+        tz += 0x00000001
+        tid += tz
+        tm >>>= tz
+        launch_batched_thread!(cfunc, tid, argtup, start, stop)
+        start = stop
+        i == _nthread && break
+      end
     end
     f!(arguments, (start+one(UInt)) % Int, ulen % Int)
-    tm = mask(threads)
-    tid = 0x00000000
-    while true
-      VectorizationBase.assume(tm ≠ zero(tm))
-      tz = trailing_zeros(tm) % UInt32
-      tz += 0x00000001
-      tm >>>= tz
-      tid += tz
-      # @show tid, ThreadingUtilities._atomic_state(tid)
-      ThreadingUtilities.wait(tid)
-      iszero(tm) && break
+    for (threadmask, nthread, torelease) ∈ zip(threadmask_tuple, nthread_tuple, torelease_tuple)
+      tm = mask(UnsignedIteratorEarlyStop(threadmask, nthread))
+      tid = 0x00000000
+      while true
+        VectorizationBase.assume(tm ≠ zero(tm))
+        tz = trailing_zeros(tm) % UInt32
+        tz += 0x00000001
+        tm >>>= tz
+        tid += tz
+        # @show tid, ThreadingUtilities._atomic_state(tid)
+        ThreadingUtilities.wait(tid)
+        iszero(tm) && break
+      end
+      free_threads!(torelease)
     end
-    free_threads!(torelease)
     nothing
   end
   gcpr = Expr(:gc_preserve, block, :cfunc)
@@ -177,23 +185,23 @@ end
 
 
 @inline function batch(
-    f!::F, (len, nbatches)::Tuple{Vararg{Integer,2}}, args::Vararg{Any,K}
+  f!::F, (len, nbatches)::Tuple{Vararg{Integer,2}}, args::Vararg{Any,K}
 ) where {F,K}
-    threads, torelease = request_threads(Base.Threads.threadid(), nbatches - one(nbatches))
-    nthread = length(threads)
-    ulen = len % UInt
-    if nthread % Int32 ≤ zero(Int32)
-        f!(args, one(Int), ulen % Int)
-        return
-    end
-    nbatch = nthread + one(nthread)
-    Nd = Base.udiv_int(ulen, nbatch % UInt) # reasonable for `ulen` to be ≥ 2^32
-    Nr = ulen - Nd * nbatch
+  threads, torelease = request_threads(Base.Threads.threadid(), nbatches - one(nbatches))
+  nthread = sum(map(length,threads))
+  ulen = len % UInt
+  if nthread % Int32 ≤ zero(Int32)
+    f!(args, one(Int), ulen % Int)
+    return
+  end
+  nbatch = nthread + one(nthread)
+  Nd = Base.udiv_int(ulen, nbatch % UInt) # reasonable for `ulen` to be ≥ 2^32
+  Nr = ulen - Nd * nbatch
 
-    _batch_no_reserve(f!, mask(threads), nthread, torelease, Nr, Nd, ulen, args...)
+  _batch_no_reserve(f!, mask(threads), nthread, torelease, Nr, Nd, ulen, args...)
 end
 function batch(
-    f!::F, (len, nbatches, reserve_per_worker)::Tuple{Vararg{Integer,3}}, args::Vararg{Any,K}
+  f!::F, (len, nbatches, reserve_per_worker)::Tuple{Vararg{Integer,3}}, args::Vararg{Any,K}
 ) where {F,K}
   ulen = len % UInt
   if nbatches > 1

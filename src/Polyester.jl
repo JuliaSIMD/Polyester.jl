@@ -1,8 +1,8 @@
 module Polyester
 
-using ThreadingUtilities, VectorizationBase
+using ThreadingUtilities
 using ArrayInterface: static_length, static_step, static_first, size
-using VectorizationBase: num_threads, num_cores, cache_linesize, __vload, __vstore!, register_size, False
+using CPUSummary: num_threads, num_cores, cache_linesize
 using StrideArraysCore: object_and_preserve
 using ManualMemory: Reference
 import IfElse
@@ -21,16 +21,15 @@ include("unsignediterator.jl")
 dynamic_thread_count() = min((Sys.CPU_THREADS)::Int, Threads.nthreads())
 reset_workers!() = WORKERS[] = (one(UInt128) << (dynamic_thread_count() - one(UInt128))) - one(UInt128)
 function __init__()
-    reset_workers!()
-    resize!(STATES, dynamic_thread_count() * cache_linesize())
-    STATES .= 0x00
-    @require ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210" include("forwarddiff.jl")
+  reset_workers!()
+  resize!(STATES, dynamic_thread_count() * cache_linesize())
+  STATES .= 0x00
+  @require ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210" include("forwarddiff.jl")
 end
 
-y = rand(1)
-x = rand(1)
-@batch for i ∈ eachindex(y,x)
-  y[i] = sin(x[i])
-end
-
+# y = rand(1)
+# x = rand(1)
+# @batch for i ∈ eachindex(y,x)
+#   y[i] = sin(x[i])
+# end
 end
