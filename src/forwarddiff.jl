@@ -46,7 +46,7 @@ function threaded_gradient!(f::F, Δx::AbstractVector, x::AbstractVector, ::Forw
     N = length(x)
     d = cld_fast(N, C)
     r = Ref{eltype(Δx)}()
-    batch((d,min(d,VectorizationBase.num_threads())), r, Δx, x) do rΔxx,start,stop
+    batch((d,min(d,num_threads())), r, Δx, x) do rΔxx,start,stop
         evaluate_chunks!(f, rΔxx, start, stop, ForwardDiff.Chunk{C}())
     end
     r[]

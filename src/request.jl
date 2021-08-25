@@ -1,5 +1,5 @@
 function worker_bits()
-  ws = VectorizationBase.nextpow2(num_threads())
+  ws = nextpow2(num_threads())
   IfElse.ifelse(Static.lt(ws,StaticInt{8}()), StaticInt{8}(), ws)
 end
 function worker_mask_count()
@@ -12,7 +12,11 @@ worker_size() = worker_bits() ÷ worker_mask_count()
 # _worker_type_combined(::StaticInt{M}) where {M} = NTuple{M,worker_type()}
 # worker_type_combined() = _worker_type_combined(worker_mask_count())
 
-worker_type() = VectorizationBase.mask_type(worker_size())
+_mask_type(::StaticInt{8}) = UInt8
+_mask_type(::StaticInt{16}) = UInt16
+_mask_type(::StaticInt{32}) = UInt32
+_mask_type(::StaticInt{64}) = UInt64
+worker_type() = _mask_type(worker_size())
 worker_pointer_type() = Ptr{worker_type()}
 
 const WORKERS = Ref(zero(UInt128)) # 0 = unavailable, 1 = available
@@ -52,7 +56,7 @@ end
 @inline function __request_threads(num_requested::UInt32, wp::Ptr, reserved_threads)
   no_threads = zero(worker_type())
   if num_requested % Int32 ≤ zero(Int32)
-    return UnsignedIteratorEarlyStop(zero(worker_type), 0x00000000), no_threads, 0x00000000, wp
+    return UnsignedIteratorEarlyStop(zero(worker_type()), 0x00000000), no_threads, 0x00000000, wp
   end
   reserved_count = count_ones(reserved_threads)%UInt32
   # reserved_count ≥ num_requested && return reserved_threads, no_threads
@@ -75,13 +79,13 @@ end
   end
   # we need to return the `excess` to the pool.
   lz = leading_zeros(all_threads) % UInt32
-  # i = 8
+  # i = 16
   while true
     # start by trying to trim off excess from lz
-    lz -= nexcess%UInt32
+    lz += (-nexcess)%UInt32
     m = (one(worker_type()) << (UInt32(last(worker_size())) - lz)) - one(worker_type())
     masked = (all_threads & m) ⊻ all_threads
-    nexcess += count_ones(masked)
+    nexcess += count_ones(masked) % UInt32
     all_threads &= (~masked)
     nexcess == zero(nexcess) && break
     # i -= 1

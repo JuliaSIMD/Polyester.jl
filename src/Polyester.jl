@@ -8,9 +8,26 @@ using ManualMemory: Reference
 import IfElse
 using Static
 using Requires
+using BitTwiddlingConvenienceFunctions: nextpow2
 
 export batch, @batch, num_threads
 
+@static if VERSION ≥ v"1.6.0-DEV.674"
+  @inline function assume(b::Bool)
+    Base.llvmcall(("""
+      declare void @llvm.assume(i1)
+
+      define void @entry(i8 %byte) alwaysinline {
+      top:
+        %bit = trunc i8 %byte to i1
+        call void @llvm.assume(i1 %bit)
+        ret void
+      }
+  """, "entry"), Cvoid, Tuple{Bool}, b)
+  end
+else
+  @inline assume(b::Bool) = Base.llvmcall(("declare void @llvm.assume(i1)", "%b = trunc i8 %0 to i1\ncall void @llvm.assume(i1 %b)\nret void"), Cvoid, Tuple{Bool}, b)
+end
 
 include("request.jl")
 include("batch.jl")

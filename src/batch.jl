@@ -68,7 +68,7 @@ end
       tm = mask(UnsignedIteratorEarlyStop(threadmask, nthread))
       _nthread += nthread
       while true
-        VectorizationBase.assume(tm ≠ zero(tm))
+        assume(tm ≠ zero(tm))
         tz = trailing_zeros(tm) % UInt32
         stop = start + ifelse(i < Nr, Ndp, Nd)
         i += 0x00000001
@@ -85,7 +85,7 @@ end
       tm = mask(UnsignedIteratorEarlyStop(threadmask, nthread))
       tid = 0x00000000
       while true
-        VectorizationBase.assume(tm ≠ zero(tm))
+        assume(tm ≠ zero(tm))
         tz = trailing_zeros(tm) % UInt32
         tz += 0x00000001
         tm >>>= tz
@@ -125,7 +125,7 @@ end
     tm = mask(threads)
     wait_mask = zero(worker_type())
     while true
-      VectorizationBase.assume(tm ≠ zero(tm))
+      assume(tm ≠ zero(tm))
       tz = trailing_zeros(tm) % UInt32
       reserve = ifelse(i < nres_rem, nres_prr, nres_per)
       tz += 0x00000001
@@ -136,7 +136,7 @@ end
       tm >>>= tz
       reserved_threads = zero(worker_type())
       for _ ∈ 1:reserve
-        VectorizationBase.assume(tm ≠ zero(tm))
+        assume(tm ≠ zero(tm))
         tz = trailing_zeros(tm) % UInt32
         tz += 0x00000001
         tid += tz
@@ -151,7 +151,7 @@ end
     end
     reserved_threads = zero(worker_type())
     for _ ∈ 1:nres_per
-      VectorizationBase.assume(tm ≠ zero(tm))
+      assume(tm ≠ zero(tm))
       tz = trailing_zeros(tm) % UInt32
       tz += 0x00000001
       tid += tz
@@ -164,7 +164,7 @@ end
     reserve_threads!(0x00000000, zero(worker_type()))
     tid = 0x00000000
     while true
-      VectorizationBase.assume(wait_mask ≠ zero(wait_mask))
+      assume(wait_mask ≠ zero(wait_mask))
       tz = (trailing_zeros(wait_mask) % UInt32) + 0x00000001
       wait_mask >>>= tz
       tid += tz
@@ -198,7 +198,7 @@ end
   Nd = Base.udiv_int(ulen, nbatch % UInt) # reasonable for `ulen` to be ≥ 2^32
   Nr = ulen - Nd * nbatch
 
-  _batch_no_reserve(f!, mask(threads), nthread, torelease, Nr, Nd, ulen, args...)
+  _batch_no_reserve(f!, map(mask,threads), nthread, torelease, Nr, Nd, ulen, args...)
 end
 function batch(
   f!::F, (len, nbatches, reserve_per_worker)::Tuple{Vararg{Integer,3}}, args::Vararg{Any,K}
@@ -217,9 +217,9 @@ function batch(
 
       unused_threads = total_threads - nbatch
       if iszero(unused_threads)
-        _batch_no_reserve(f!, mask(threads), nthread, torelease, Nr, Nd, ulen, args...)
+        _batch_no_reserve(f!, map(mask,threads), nthread, torelease, Nr, Nd, ulen, args...)
       else
-        _batch_reserve(f!, mask(threads), nbatch, unused_threads, torelease, Nr, Nd, ulen, args...)
+        _batch_reserve(f!, map(mask,threads), nbatch, unused_threads, torelease, Nr, Nd, ulen, args...)
       end
       return nothing
     end

@@ -231,6 +231,20 @@ end
   @test count_ones(Polyester.WORKERS[]) == min(128, Polyester.dynamic_thread_count() - 1)
 end
 
+@testset "Non-UnitRange loops" begin
+  u = randn(10,100);
+  x = view(u,1:5,:);
+  xref = 2 .* x;
+  @batch for i in eachindex(x)
+    x[i] *= 2.0
+  end
+  arrayofarrays = collect(eachcol(x));
+  @batch for x in arrayofarrays
+    x .*= 2.0
+  end
+  @test reduce(hcat, arrayofarrays) == (xref .*= 2)
+end
+
 if VERSION ≥ v"1.6"
   println("Package tests complete. Running `Aqua` checks.")
   Aqua.test_all(Polyester)
