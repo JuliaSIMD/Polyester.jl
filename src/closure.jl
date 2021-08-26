@@ -93,8 +93,20 @@ end
   inner, outer = splitloop(inds)
   inner, outer, x
 end
+struct TupleIndices end
+@inline function splitloop(x::Base.Iterators.ProductIterator{Tuple{T1,T2}}) where {T1,T2}
+  iters = x.iterators
+  iters[1], iters[2], TupleIndices()
+end
+@inline function splitloop(x::Base.Iterators.ProductIterator{<:Tuple{Vararg{Any,N}}}) where {N}
+  iters = x.iterators
+  Base.front(iters), iters[N], TupleIndices()
+end
 combine(::CombineIndices, ::NoLoop, x) = x
 combine(::CombineIndices, I::CartesianIndex, j) = CartesianIndex((I.I..., j))
+combine(::TupleIndices, i::Tuple, j) = (i..., j)
+combine(::TupleIndices, i::Number, j) = (i, j)
+
 Base.@propagate_inbounds combine(x::AbstractArray, I, j) = x[combine(CombineIndices(), I, j)]
 Base.@propagate_inbounds combine(x::AbstractArray, ::NoLoop, j) = x[j]
 
@@ -109,8 +121,9 @@ function static_literals!(q::Expr)
   end
   q
 end
-maybestatic!(x) = esc(x)
-function maybestatic!(expr::Expr)::Expr
+function maybestatic!(_expr)::Expr
+  _expr isa Expr || return esc(_expr)
+  expr::Expr = _expr
   if expr.head === :call
     f = first(expr.args)
     if f === :length
@@ -192,18 +205,18 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
     num_thread_expr = Expr(:call, min, num_thread_expr, Expr(:call, num_cores))
   end
   if minbatchsize isa Integer && minbatchsize ≤ 1
-    if reserve_per ≤ 0
+    # if reserve_per ≤ 0
       push!(threadtup.args, :(min($iter_leng, $num_thread_expr)))
-    else
-      push!(threadtup.args, :(min($iter_leng, cld($num_thread_expr, $reserve_per))), reserve_per)
-    end
+    # else
+    #   push!(threadtup.args, :(min($iter_leng, cld($num_thread_expr, $reserve_per))), reserve_per)
+    # end
   else
     il = :(div($iter_leng, $(minbatchsize isa Int ? StaticInt(minbatchsize) : esc(minbatchsize))))
-    if reserve_per ≤ 0
+    # if reserve_per ≤ 0
       push!(threadtup.args, :(min($il, $num_thread_expr)))
-    else
-      push!(threadtup.args, :(min($il, cld($num_thread_expr, $reserve_per))), reserve_per)
-    end
+    # else
+    #   push!(threadtup.args, :(min($il, cld($num_thread_expr, $reserve_per))), reserve_per)
+    # end
   end
   closure = Symbol("##closure##")
   args = Expr(:tuple, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))

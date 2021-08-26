@@ -89,7 +89,7 @@ end
 
 function issue25!(dest, x, y)
     @batch for (i,j) ∈ Iterators.product(eachindex(x), eachindex(y))
-        dest[i,j] = x[i] * y[i]
+        dest[i,j] = x[i] * y[j]
     end
     dest
 end
@@ -151,7 +151,8 @@ end
     issue18!(ones(3))
 
     let x = rand(100), y = rand(100), dest1 = x .* y'; dest0 = similar(dest1);
-        @test_broken issue25!(dest0, x, y) ≈ dest1
+        # TODO: don't only thread outer
+        @test issue25!(dest0, x, y) ≈ dest1
     end
 end
 
@@ -249,3 +250,5 @@ if VERSION ≥ v"1.6"
   println("Package tests complete. Running `Aqua` checks.")
   Aqua.test_all(Polyester)
 end
+
+
