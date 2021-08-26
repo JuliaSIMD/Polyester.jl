@@ -89,7 +89,7 @@ end
 
 function issue25!(dest, x, y)
     @batch for (i,j) ∈ Iterators.product(eachindex(x), eachindex(y))
-        dest[i,j] = x[i] * y[i]
+        dest[i,j] = x[i] * y[j]
     end
     dest
 end
@@ -151,7 +151,8 @@ end
     issue18!(ones(3))
 
     let x = rand(100), y = rand(100), dest1 = x .* y'; dest0 = similar(dest1);
-        @test_broken issue25!(dest0, x, y) ≈ dest1
+        # TODO: don't only thread outer
+        @test issue25!(dest0, x, y) ≈ dest1
     end
 end
 
@@ -231,7 +232,23 @@ end
   @test count_ones(Polyester.WORKERS[]) == min(128, Polyester.dynamic_thread_count() - 1)
 end
 
+@testset "Non-UnitRange loops" begin
+  u = randn(10,100);
+  x = view(u,1:5,:);
+  xref = 2 .* x;
+  @batch for i in eachindex(x)
+    x[i] *= 2.0
+  end
+  arrayofarrays = collect(eachcol(x));
+  @batch for x in arrayofarrays
+    x .*= 2.0
+  end
+  @test reduce(hcat, arrayofarrays) == (xref .*= 2)
+end
+
 if VERSION ≥ v"1.6"
   println("Package tests complete. Running `Aqua` checks.")
   Aqua.test_all(Polyester)
 end
+
+

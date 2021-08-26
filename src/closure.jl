@@ -75,7 +75,40 @@ function extractargs!(arguments::Vector{Symbol}, defined::Set, expr::Expr, mod)
   for i ∈ startind:length(args)
     extractargs!(arguments, defined, args[i], mod)
   end
+  return
 end
+
+struct NoLoop end
+Base.iterate(::NoLoop) = (NoLoop(), NoLoop())
+Base.iterate(::NoLoop, ::NoLoop) = nothing
+@inline splitloop(x) = NoLoop(), x
+struct CombineIndices end
+@inline splitloop(x::AbstractUnitRange) = NoLoop(), x, CombineIndices()
+@inline function splitloop(x::CartesianIndices)
+  axes = x.indices
+  CartesianIndices(Base.front(axes)), last(axes), CombineIndices()
+end
+@inline function splitloop(x::AbstractArray)
+  inds = eachindex(x)
+  inner, outer = splitloop(inds)
+  inner, outer, x
+end
+struct TupleIndices end
+@inline function splitloop(x::Base.Iterators.ProductIterator{Tuple{T1,T2}}) where {T1,T2}
+  iters = x.iterators
+  iters[1], iters[2], TupleIndices()
+end
+@inline function splitloop(x::Base.Iterators.ProductIterator{<:Tuple{Vararg{Any,N}}}) where {N}
+  iters = x.iterators
+  Base.front(iters), iters[N], TupleIndices()
+end
+combine(::CombineIndices, ::NoLoop, x) = x
+combine(::CombineIndices, I::CartesianIndex, j) = CartesianIndex((I.I..., j))
+combine(::TupleIndices, i::Tuple, j) = (i..., j)
+combine(::TupleIndices, i::Number, j) = (i, j)
+
+Base.@propagate_inbounds combine(x::AbstractArray, I, j) = x[combine(CombineIndices(), I, j)]
+Base.@propagate_inbounds combine(x::AbstractArray, ::NoLoop, j) = x[j]
 
 static_literals!(s::Symbol) = s
 function static_literals!(q::Expr)
@@ -88,7 +121,9 @@ function static_literals!(q::Expr)
   end
   q
 end
-function maybestatic!(expr::Expr)::Expr
+function maybestatic!(_expr)::Expr
+  _expr isa Expr || return esc(_expr)
+  expr::Expr = _expr
   if expr.head === :call
     f = first(expr.args)
     if f === :length
@@ -114,8 +149,11 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
   loop_stop = Symbol("##LOOP_STOP##")
   iter_leng = Symbol("##ITER_LENG##")
   loop_offs = Symbol("##LOOPOFFSET##")
-
-  arguments = Symbol[]#loop_offs, loop_step]
+  innerloop = Symbol("##inner##loop##")
+  rcombiner = Symbol("##split##recombined##")
+  
+  # arguments = Symbol[]#loop_offs, loop_step]
+  arguments = Symbol[innerloop, rcombiner]#loop_offs, loop_step]
   defined = Set((loop_offs, loop_step));
   define_induction_variables!(defined, ex)
   if ex.args[1].head === :block
@@ -128,14 +166,36 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
   end
   firstloop = ex.args[1]
   if firstloop.head === :block
+    secondaryloopsargs = firstloop.args[2:end]
     firstloop = firstloop.args[1]
+  else
+    secondaryloopsargs = Any[]
   end
   loop = firstloop.args[2]
-  firstloop.args[2] = Expr(:call, GlobalRef(Base, :(:)), loopstart, loop_step, loop_stop)
+  # @show ex loop
+  firstlooprange = Expr(:call, GlobalRef(Base, :(:)), loopstart, loop_step, loop_stop)
+  body = ex.args[2]
+  if length(secondaryloopsargs) == 1
+    body = Expr(:for, only(secondaryloopsargs), body)
+  elseif length(secondaryloopsargs) > 1
+    sl = Expr(:block); append!(sl.args, secondaryloopsargs)
+    body = Expr(:for, sl, body)
+  end
+  # @show ex.args[1] firstloop body
+  # if length(ex.args[
+  ex = quote
+    # for $(firstloop.args[1]) in 
+    for var"##outer##" in $firstlooprange, var"##inner##" in $innerloop
+      $(firstloop.args[1]) = $combine($rcombiner, var"##inner##", var"##outer##")
+      $body
+    end
+  end
   # typexpr_incomplete is missing `funcs`
+  # outerloop = Symbol("##outer##")
   q = quote
-    $loop_sym = $(maybestatic!(loop))
-    $iter_leng = static_length($loop_sym)
+    $(esc(innerloop)), $loop_sym, $(esc(rcombiner)) = $splitloop($(maybestatic!(loop)))
+    # $loop_sym = $(maybestatic!(loop))
+    $iter_leng = $static_length($loop_sym)
     $loop_step = $static_step($loop_sym)
     $loop_offs = $static_first($loop_sym)
   end
@@ -145,18 +205,18 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
     num_thread_expr = Expr(:call, min, num_thread_expr, Expr(:call, num_cores))
   end
   if minbatchsize isa Integer && minbatchsize ≤ 1
-    if reserve_per ≤ 0
+    # if reserve_per ≤ 0
       push!(threadtup.args, :(min($iter_leng, $num_thread_expr)))
-    else
-      push!(threadtup.args, :(min($iter_leng, cld($num_thread_expr, $reserve_per))), reserve_per)
-    end
+    # else
+    #   push!(threadtup.args, :(min($iter_leng, cld($num_thread_expr, $reserve_per))), reserve_per)
+    # end
   else
     il = :(div($iter_leng, $(minbatchsize isa Int ? StaticInt(minbatchsize) : esc(minbatchsize))))
-    if reserve_per ≤ 0
+    # if reserve_per ≤ 0
       push!(threadtup.args, :(min($il, $num_thread_expr)))
-    else
-      push!(threadtup.args, :(min($il, cld($num_thread_expr, $reserve_per))), reserve_per)
-    end
+    # else
+    #   push!(threadtup.args, :(min($il, cld($num_thread_expr, $reserve_per))), reserve_per)
+    # end
   end
   closure = Symbol("##closure##")
   args = Expr(:tuple, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))
