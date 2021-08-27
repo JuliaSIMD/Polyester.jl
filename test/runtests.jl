@@ -95,6 +95,10 @@ function issue25!(dest, x, y)
 end
 
 @testset "Range Map" begin
+    threads, torelease = Polyester.request_threads(nothing, Threads.nthreads()-1)
+    @test threads isa NTuple{Int(Polyester.worker_mask_count()),Polyester.UnsignedIteratorEarlyStop{Polyester.worker_type()}}
+    @test sum(map(length, threads)) == (Polyester.num_threads())-1
+    map(Polyester.free_threads!, torelease)
 
     x = rand(1024); y = rand(length(x)); z = similar(x);
     foo(x,y) = exp(-0.5abs2(x-y))

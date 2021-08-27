@@ -109,12 +109,14 @@ end
   return UnsignedIteratorEarlyStop(all_threads, num_requested), all_threads, 0x00000000, wpret
   # return UnsignedIteratorEarlyStop(reserved_threads | all_threads, num_requested), all_threads, 0x00000000, wpret
 end
-@inline function request_threads(id, num_requested)
+@inline function request_threads(num_requested)
   # _request_threads(num_requested % UInt32, worker_pointer(), reserved(id % UInt32))
   _request_threads(num_requested % UInt32, worker_pointer(), worker_mask_count())
 end
 # reserved_threads(id) = UnsignedIteratorEarlyStop(reserved(id))
 # reserved_threads(id, count) = UnsignedIteratorEarlyStop(reserved(id), count % UInt32)
 
+# TODO: delete me on next minor version bump, or add back 
+@inline request_threads(id, num_requested) = request_threads(num_requested)
 
 
