@@ -50,8 +50,8 @@ function add_var!(q, argtup, gcpres, ::Type{T}, argtupname, gcpresname, k) where
   end
 end
 @generated function _batch_no_reserve(
-  f!::F, threadmask_tuple, nthread_tuple, torelease_tuple, Nr, Nd, ulen, args::Vararg{Any,K}
-) where {F,K}
+  f!::F, threadmask_tuple::NTuple{N}, nthread_tuple, torelease_tuple, Nr, Nd, ulen, args::Vararg{Any,K}
+) where {F,K,N}
   q = quote
     $(Expr(:meta,:inline))
     # threads = UnsignedIteratorEarlyStop(threadmask, nthread)
@@ -62,39 +62,34 @@ end
   block = quote
     start = zero(UInt)
     tid = 0x00000000
-    j = 0x00000000
     for (threadmask, nthread) ∈ zip(threadmask_tuple, nthread_tuple)
       tm = mask(UnsignedIteratorEarlyStop(threadmask, nthread))
-      i = nthread
-      repeat = true
-      while repeat
+      i = 0x00000000
+      while i ≠ nthread
         assume(tm ≠ zero(tm))
         tz = trailing_zeros(tm) % UInt32
-        stop = start + ifelse(j < Nr, Ndp, Nd)
-        i -= 0x00000001
-        j += 0x00000001
+        stop = start + ifelse(i < Nr, Ndp, Nd)
+        i += 0x00000001
         tz += 0x00000001
         tid += tz
         tm >>>= tz
         launch_batched_thread!(cfunc, tid, argtup, start, stop)
         start = stop
-        repeat = i ≠ 0x00000000
       end
+      Nr -= nthread
     end
     f!(arguments, (start+one(UInt)) % Int, ulen % Int)
     for (threadmask, nthread, torelease) ∈ zip(threadmask_tuple, nthread_tuple, torelease_tuple)
       tm = mask(UnsignedIteratorEarlyStop(threadmask, nthread))
       tid = 0x00000000
-      repeat = true
-      while repeat
-        assume(tm ≠ zero(tm))
+      while tm ≠ zero(tm)
+        # assume(tm ≠ zero(tm)) 
         tz = trailing_zeros(tm) % UInt32
         tz += 0x00000001
         tm >>>= tz
         tid += tz
         # @show tid, ThreadingUtilities._atomic_state(tid)
         ThreadingUtilities.wait(tid)
-        repeat = tm ≠ 0x00000000
       end
       free_threads!(torelease)
     end
@@ -207,7 +202,8 @@ end
 @inline function batch(
   f!::F, (len, nbatches)::Tuple{Vararg{Integer,2}}, args::Vararg{Any,K}
 ) where {F,K}
-  threads, torelease = request_threads(Base.Threads.threadid(), nbatches - one(nbatches))
+  # threads, torelease = request_threads(Base.Threads.threadid(), nbatches - one(nbatches))
+  threads, torelease = request_threads(nbatches - one(nbatches))
   nthreads = map(length,threads)
   nthread = sum(nthreads)
   ulen = len % UInt
