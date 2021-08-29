@@ -10,7 +10,9 @@ function bsin!(y,x)
 end
 function bcos!(y,x)
   @batch per=core for i ∈ eachindex(y,x)
-    y[i] = cos(x[i])
+    local cxᵢ
+    cxᵢ = cos(x[i])
+    y[i] = cxᵢ
   end
   return y
 end
@@ -26,13 +28,13 @@ function sin_batch_sum(v)
   return sum(view(s, 1, :))
 end
 function rowsum_batch!(x, A)
-    @batch for n ∈ axes(A,2)
-        s = 0.0
-        @simd for m ∈ axes(A,1)
-            s += A[m,n]
-        end
-        x[n] = s
+  @batch for n ∈ axes(A,2)
+    local s = 0.0
+    @simd for m ∈ axes(A,1)
+      s += A[m,n]
     end
+    x[n] = s
+  end
 end
 function bar!(dest, src)
     @batch for i in eachindex(dest)
