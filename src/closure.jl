@@ -45,6 +45,15 @@ function depends_on_defined(defined::Set, f::Expr)::Bool
   end
   false
 end
+function extractargs_equal!(arguments::Vector{Symbol}, defined::Set, args::Vector{Any})
+  arg1 = first(args)
+  if arg1 isa Symbol
+    push!(defined, arg1)
+  elseif Meta.isexpr(arg1, :tuple)
+    define_tup!(defined, arg1)
+  end
+  nothing
+end
 function extractargs!(arguments::Vector{Symbol}, defined::Set, expr::Expr, mod)
   define_induction_variables!(defined, expr)
   head = expr.head
@@ -54,12 +63,7 @@ function extractargs!(arguments::Vector{Symbol}, defined::Set, expr::Expr, mod)
     # (length(args) === 3) && args[1] === 
     startind = 2
   elseif head === :(=)
-    arg1 = first(args)
-    if arg1 isa Symbol
-      push!(defined, arg1)
-    elseif Meta.isexpr(arg1, :tuple)
-      define_tup!(defined, arg1)
-    end
+    extractargs_equal!(arguments, defined, args)
   elseif head ∈ (:inbounds, :loopinfo)#, :(->))
     return
   elseif head === :(.)
@@ -70,6 +74,11 @@ function extractargs!(arguments::Vector{Symbol}, defined::Set, expr::Expr, mod)
     define!(td, args[1])
     extractargs!(arguments, td, args[1], mod)
     extractargs!(arguments, td, args[2], mod)
+    return
+  elseif (head === :local) || (head === :global)
+    for arg in args
+      Meta.isexpr(arg, :(=)) && extractargs_equal!(arguments, defined, arg.args)
+    end
     return
   end
   for i ∈ startind:length(args)
