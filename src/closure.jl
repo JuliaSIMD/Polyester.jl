@@ -82,7 +82,9 @@ function extractargs!(arguments::Vector{Symbol}, defined::Set, expr::Expr, mod)
     return
   end
   for i ∈ startind:length(args)
-    extractargs!(arguments, defined, args[i], mod)
+    argᵢ = args[i]
+    (head === :ref && ((argᵢ === :end) || (argᵢ === :begin))) && continue
+    extractargs!(arguments, defined, argᵢ, mod)
   end
   return
 end
