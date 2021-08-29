@@ -91,7 +91,7 @@ end
 
 function issue25!(dest, x, y)
     @batch for (i,j) ∈ Iterators.product(eachindex(x), eachindex(y))
-        dest[i,j] = x[i] * y[j]
+        dest[i,j] = x[i,begin] * y[j,end]
     end
     dest
 end
