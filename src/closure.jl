@@ -80,6 +80,8 @@ function extractargs!(arguments::Vector{Symbol}, defined::Set, expr::Expr, mod)
       Meta.isexpr(arg, :(=)) && extractargs_equal!(arguments, defined, arg.args)
     end
     return
+  elseif head === :kw
+    return
   end
   for i ∈ startind:length(args)
     argᵢ = args[i]
