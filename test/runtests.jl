@@ -252,9 +252,45 @@ end
   @test reduce(hcat, arrayofarrays) == (xref .*= 2)
 end
 
+println("Issue 245...")
+
+import Polyester: splitloop, combine, NoLoop, @batch
+using Test
+
+struct LazyTree{T}
+  t::T
+end
+
+Base.getindex(lt::LazyTree, row::Int) = lt.t[row]
+Base.length(lt::LazyTree) = length(lt.t)
+Base.lastindex(lt::LazyTree) = length(lt)
+Base.eachindex(lt::LazyTree) = 1:lastindex(lt)
+splitloop(e::Base.Iterators.Enumerate{LazyTree{T}}) where T = NoLoop(), eachindex(e.itr), e
+combine(e::Iterators.Enumerate{LazyTree{T}}, ::NoLoop, j) where T =  @inbounds e[j]
+Base.getindex(e::Iterators.Enumerate{LazyTree{T}}, row::Int) where T = (row, first(iterate(e.itr, row)))
+function Base.iterate(tree::LazyTree, idx=1) where {T<:LazyTree}
+  idx > length(tree) && return nothing
+  return tree.t[idx], idx + 1
+end
+Base.firstindex(e::Iterators.Enumerate{LazyTree{T}}) where T = firstindex(e.itr)
+Base.lastindex(e::Iterators.Enumerate{LazyTree{T}}) where T = lastindex(e.itr)
+Base.eachindex(e::Iterators.Enumerate{LazyTree{T}}) where T = eachindex(e.itr)
+
+@testset "unROOT Enumerate interface" begin
+  t = LazyTree(collect(2001:3000))
+  for i in 1:3
+    println("ITER $i")
+    inds = [Vector{Int}() for _ in 1:Threads.nthreads()]
+    @batch for (i,evt) in enumerate(t)
+      push!(inds[Threads.threadid()], i)
+    end
+    @test sum([length(inds[i] ∩ inds[j]) for i=1:length(inds), j=1:length(inds) if j>i]) == 0
+  end
+  evt = 5
+end
+
 if VERSION ≥ v"1.6"
   println("Package tests complete. Running `Aqua` checks.")
   Aqua.test_all(Polyester)
 end
-
 
