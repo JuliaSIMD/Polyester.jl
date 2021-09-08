@@ -1,5 +1,3 @@
-
-
 function getgensym!(defined::Dict{Symbol,Symbol}, s::Symbol)
   snew = get!(defined, s) do
     gensym(s)
@@ -46,16 +44,6 @@ function define_induction_variables!(defined::Dict{Symbol,Symbol}, ex::Expr) # a
   end
 end
 
-depends_on_defined(defined::Set, f)::Bool = false
-depends_on_defined(defined::Set, f::Function)::Bool = f === Threads.threadid
-depends_on_defined(defined::Set, f::QuoteNode) = f.value === :threadid
-depends_on_defined(defined::Set, f::Symbol)::Bool = (f ∈ defined) || (f === :threadid)
-function depends_on_defined(defined::Set, f::Expr)::Bool
-  for a ∈ f.args
-    depends_on_defined(defined, a) && return true
-  end
-  false
-end
 function extractargs_equal!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, args::Vector{Any})
   arg1 = first(args)
   if arg1 isa Symbol
@@ -65,20 +53,37 @@ function extractargs_equal!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symb
   end
   nothing
 end
+function must_add_sym(defined::Dict{Symbol,Symbol}, arg::Symbol, mod)
+  ((arg ∉ keys(defined)) && arg ∉ (:nothing, :(+), :(*), :(-), :(/), :(÷), :(<<), :(>>), :(>>>), :zero, :one)) && !Base.isdefined(mod, arg)
+end
+function get_sym!(defined::Dict{Symbol,Symbol}, arguments::Vector{Symbol}, arg::Symbol, mod)
+  if must_add_sym(defined, arg, mod)
+    # @show getgensym!(defined, sym)
+    # @assert false
+    push!(arguments, arg)
+    getgensym!(defined, arg)
+  else
+    get(defined, arg, arg)
+  end
+end
 function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, expr::Expr, mod)
   define_induction_variables!(defined, expr)
   head = expr.head
   args = expr.args
   startind = 1
   if head === :call
-    # (length(args) === 3) && args[1] === 
     startind = 2
   elseif head === :(=)
     extractargs_equal!(arguments, defined, args)
   elseif head ∈ (:inbounds, :loopinfo)#, :(->))
     return
   elseif head === :(.)
-    extractargs!(arguments, defined, args[1], mod)
+    arg1 = args[1]
+    if arg1 isa Symbol
+      args[1] = get_sym!(defined, arguments, arg1, mod)
+    else
+      extractargs!(arguments, defined, args[1], mod)
+    end
     return
   elseif head === :(->)
     td = copy(defined)
@@ -87,18 +92,16 @@ function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, e
     extractargs!(arguments, td, args[2], mod)
     return
   elseif (head === :local) || (head === :global)
-    for arg in args
+    for (i,arg) in enumerate(args)
       if Meta.isexpr(arg, :(=))
         extractargs_equal!(arguments, defined, arg.args)
-        arg2 = arg.args[2]
-        if arg2 isa Symbol
-          arg.args[2] = getgensym!(defined, arg2)
-        else
-          extractargs!(arguments, defined, arg.args[2], mod)
-        end
+        args = arg.args
+        startind = 2
+      else
+        args[i] = getgensym!(defined, arg)
+        return
       end
     end
-    return
   elseif head === :kw
     return
   end
@@ -106,18 +109,7 @@ function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, e
     argᵢ = args[i]
     (head === :ref && ((argᵢ === :end) || (argᵢ === :begin))) && continue
     if argᵢ isa Symbol
-      
-      # args[i] = argᵢ = get(defined, argᵢ, argᵢ)
-      args[i] = if ((argᵢ ∉ keys(defined)) && argᵢ ∉ (:nothing, :(+), :(*), :(-), :(/), :(÷), :(<<), :(>>), :(>>>), :zero, :one)) && !Base.isdefined(mod, argᵢ)
-        # @show getgensym!(defined, sym)
-        # @assert false
-        push!(arguments, argᵢ)
-        argᵢ = getgensym!(defined, argᵢ)
-        argᵢ
-      else
-        get(defined, argᵢ, argᵢ)
-      end
-      # extractargs!(arguments, defined, argᵢ, mod)
+      args[i] = get_sym!(defined, arguments, argᵢ, mod)
     elseif argᵢ isa Expr
       extractargs!(arguments, defined, argᵢ, mod)
     else
@@ -200,7 +192,7 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
   loop_offs = Symbol("##LOOPOFFSET##")
   innerloop = Symbol("##inner##loop##")
   rcombiner = Symbol("##split##recombined##")
-  
+
   # arguments = Symbol[]#loop_offs, loop_step]
   arguments = Symbol[innerloop, rcombiner]#loop_offs, loop_step]
   defined = Dict{Symbol,Symbol}(loop_offs => loop_offs, loop_step => loop_step)
@@ -226,7 +218,7 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
   excomb = if fla1 isa Symbol
     fla1 = getgensym!(defined, fla1)
     quote
-      # for $(firstloop.args[1]) in 
+      # for $(firstloop.args[1]) in
       for var"##outer##" in $firstlooprange, var"##inner##" in $innerloop
         $fla1 = $combine($rcombiner, var"##inner##", var"##outer##")
         $body
@@ -238,7 +230,7 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
       fla1.args[i] = getgensym!(defined, fla1.args[i])
     end
     quote
-      # for $(firstloop.args[1]) in 
+      # for $(firstloop.args[1]) in
       for var"##outer##" in $firstlooprange, var"##inner##" in $innerloop
         $fla1 = $combine($rcombiner, var"##inner##", var"##outer##")
         $body
@@ -256,7 +248,7 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
   # @show ex.args[1] firstloop body
   # if length(ex.args[
   # ex = quote
-  #   # for $(firstloop.args[1]) in 
+  #   # for $(firstloop.args[1]) in
   #   for var"##outer##" in $firstlooprange, var"##inner##" in $innerloop
   #     $(firstloop.args[1]) = $combine($rcombiner, var"##inner##", var"##outer##")
   #     $body
@@ -311,7 +303,7 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
     push!(batchcall.args, esc(a))
   end
   push!(q.args, batchcall)
-  quote    
+  quote
     if $num_threads() == 1
       let
         $(esc(exorig))
@@ -389,4 +381,3 @@ macro batch(arg1, arg2, arg3, ex)
   reserve, minbatch, per = interpret_kwarg(arg2, reserve, minbatch, per)
   enclose(macroexpand(__module__, ex), reserve, minbatch, per, __module__)
 end
-
