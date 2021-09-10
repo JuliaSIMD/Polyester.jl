@@ -1,5 +1,3 @@
-
-
 function getgensym!(defined::Dict{Symbol,Symbol}, s::Symbol)
   snew = get!(defined, s) do
     gensym(s)
@@ -71,14 +69,22 @@ function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, e
   args = expr.args
   startind = 1
   if head === :call
-    # (length(args) === 3) && args[1] === 
+    # (length(args) === 3) && args[1] ===
     startind = 2
   elseif head === :(=)
     extractargs_equal!(arguments, defined, args)
   elseif head ∈ (:inbounds, :loopinfo)#, :(->))
     return
   elseif head === :(.)
-    extractargs!(arguments, defined, args[1], mod)
+    arg₁ = args[1]
+    if arg₁ isa Symbol
+      if (arg₁ ∉ keys(defined)) && (!Base.isdefined(mod, arg₁))
+        push!(arguments, arg₁)
+        args[1] = getgensym!(defined, arg₁)
+      end
+    else
+      extractargs!(arguments, defined, args[1], mod)
+    end
     return
   elseif head === :(->)
     td = copy(defined)
@@ -106,7 +112,7 @@ function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, e
     argᵢ = args[i]
     (head === :ref && ((argᵢ === :end) || (argᵢ === :begin))) && continue
     if argᵢ isa Symbol
-      
+
       # args[i] = argᵢ = get(defined, argᵢ, argᵢ)
       args[i] = if ((argᵢ ∉ keys(defined)) && argᵢ ∉ (:nothing, :(+), :(*), :(-), :(/), :(÷), :(<<), :(>>), :(>>>), :zero, :one)) && !Base.isdefined(mod, argᵢ)
         # @show getgensym!(defined, sym)
@@ -200,7 +206,7 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
   loop_offs = Symbol("##LOOPOFFSET##")
   innerloop = Symbol("##inner##loop##")
   rcombiner = Symbol("##split##recombined##")
-  
+
   # arguments = Symbol[]#loop_offs, loop_step]
   arguments = Symbol[innerloop, rcombiner]#loop_offs, loop_step]
   defined = Dict{Symbol,Symbol}(loop_offs => loop_offs, loop_step => loop_step)
@@ -226,7 +232,7 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
   excomb = if fla1 isa Symbol
     fla1 = getgensym!(defined, fla1)
     quote
-      # for $(firstloop.args[1]) in 
+      # for $(firstloop.args[1]) in
       for var"##outer##" in $firstlooprange, var"##inner##" in $innerloop
         $fla1 = $combine($rcombiner, var"##inner##", var"##outer##")
         $body
@@ -238,7 +244,7 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
       fla1.args[i] = getgensym!(defined, fla1.args[i])
     end
     quote
-      # for $(firstloop.args[1]) in 
+      # for $(firstloop.args[1]) in
       for var"##outer##" in $firstlooprange, var"##inner##" in $innerloop
         $fla1 = $combine($rcombiner, var"##inner##", var"##outer##")
         $body
@@ -256,7 +262,7 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
   # @show ex.args[1] firstloop body
   # if length(ex.args[
   # ex = quote
-  #   # for $(firstloop.args[1]) in 
+  #   # for $(firstloop.args[1]) in
   #   for var"##outer##" in $firstlooprange, var"##inner##" in $innerloop
   #     $(firstloop.args[1]) = $combine($rcombiner, var"##inner##", var"##outer##")
   #     $body
@@ -311,7 +317,7 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
     push!(batchcall.args, esc(a))
   end
   push!(q.args, batchcall)
-  quote    
+  quote
     if $num_threads() == 1
       let
         $(esc(exorig))
@@ -389,4 +395,3 @@ macro batch(arg1, arg2, arg3, ex)
   reserve, minbatch, per = interpret_kwarg(arg2, reserve, minbatch, per)
   enclose(macroexpand(__module__, ex), reserve, minbatch, per, __module__)
 end
-
