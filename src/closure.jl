@@ -44,16 +44,6 @@ function define_induction_variables!(defined::Dict{Symbol,Symbol}, ex::Expr) # a
   end
 end
 
-depends_on_defined(defined::Set, f)::Bool = false
-depends_on_defined(defined::Set, f::Function)::Bool = f === Threads.threadid
-depends_on_defined(defined::Set, f::QuoteNode) = f.value === :threadid
-depends_on_defined(defined::Set, f::Symbol)::Bool = (f ∈ defined) || (f === :threadid)
-function depends_on_defined(defined::Set, f::Expr)::Bool
-  for a ∈ f.args
-    depends_on_defined(defined, a) && return true
-  end
-  false
-end
 function extractargs_equal!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, args::Vector{Any})
   arg1 = first(args)
   if arg1 isa Symbol
@@ -63,27 +53,42 @@ function extractargs_equal!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symb
   end
   nothing
 end
+function must_add_sym(defined::Dict{Symbol,Symbol}, arg::Symbol, mod)
+  ((arg ∉ keys(defined)) && arg ∉ (:nothing, :(+), :(*), :(-), :(/), :(÷), :(<<), :(>>), :(>>>), :zero, :one)) && !Base.isdefined(mod, arg)
+end
+function get_sym!(defined::Dict{Symbol,Symbol}, arguments::Vector{Symbol}, arg::Symbol, mod)
+  if must_add_sym(defined, arg, mod)
+    # @show getgensym!(defined, sym)
+    # @assert false
+    push!(arguments, arg)
+    getgensym!(defined, arg)
+  else
+    get(defined, arg, arg)
+  end
+end
 function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, expr::Expr, mod)
   define_induction_variables!(defined, expr)
   head = expr.head
   args = expr.args
   startind = 1
   if head === :call
-    # (length(args) === 3) && args[1] ===
     startind = 2
   elseif head === :(=)
     extractargs_equal!(arguments, defined, args)
   elseif head ∈ (:inbounds, :loopinfo)#, :(->))
     return
   elseif head === :(.)
-    arg₁ = args[1]
-    if arg₁ isa Symbol
-      if (arg₁ ∉ keys(defined)) && (!Base.isdefined(mod, arg₁))
-        push!(arguments, arg₁)
-        args[1] = getgensym!(defined, arg₁)
-      end
+    # arg₁ = args[1]
+    # if arg₁ isa Symbol
+    #   if (arg₁ ∉ keys(defined)) && (!Base.isdefined(mod, arg₁))
+    #     push!(arguments, arg₁)
+    #     args[1] = getgensym!(defined, arg₁)
+    #   end
+    arg1 = args[1]
+    if arg1 isa Symbol
+      args[1] = get_sym!(defined, arguments, arg1, mod)
     else
-      extractargs!(arguments, defined, args[1], mod)
+      extractargs!(arguments, defined, arg1, mod)
     end
     return
   elseif head === :(->)
@@ -93,18 +98,16 @@ function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, e
     extractargs!(arguments, td, args[2], mod)
     return
   elseif (head === :local) || (head === :global)
-    for arg in args
+    for (i,arg) in enumerate(args)
       if Meta.isexpr(arg, :(=))
         extractargs_equal!(arguments, defined, arg.args)
-        arg2 = arg.args[2]
-        if arg2 isa Symbol
-          arg.args[2] = getgensym!(defined, arg2)
-        else
-          extractargs!(arguments, defined, arg.args[2], mod)
-        end
+        args = arg.args
+        startind = 2
+      else
+        args[i] = getgensym!(defined, arg)
+        return
       end
     end
-    return
   elseif head === :kw
     return
   end
@@ -112,18 +115,7 @@ function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, e
     argᵢ = args[i]
     (head === :ref && ((argᵢ === :end) || (argᵢ === :begin))) && continue
     if argᵢ isa Symbol
-
-      # args[i] = argᵢ = get(defined, argᵢ, argᵢ)
-      args[i] = if ((argᵢ ∉ keys(defined)) && argᵢ ∉ (:nothing, :(+), :(*), :(-), :(/), :(÷), :(<<), :(>>), :(>>>), :zero, :one)) && !Base.isdefined(mod, argᵢ)
-        # @show getgensym!(defined, sym)
-        # @assert false
-        push!(arguments, argᵢ)
-        argᵢ = getgensym!(defined, argᵢ)
-        argᵢ
-      else
-        get(defined, argᵢ, argᵢ)
-      end
-      # extractargs!(arguments, defined, argᵢ, mod)
+      args[i] = get_sym!(defined, arguments, argᵢ, mod)
     elseif argᵢ isa Expr
       extractargs!(arguments, defined, argᵢ, mod)
     else
