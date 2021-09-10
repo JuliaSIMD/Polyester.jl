@@ -11,7 +11,7 @@ end
 function bcos!(y,x)
   @batch per=core for i ∈ eachindex(y,x)
     local cxᵢ
-    cxᵢ = cos(x[i])
+    cxᵢ = cos.(x[i])
     y[i] = cxᵢ
   end
   return y

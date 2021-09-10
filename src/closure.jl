@@ -78,19 +78,12 @@ function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, e
   elseif head ∈ (:inbounds, :loopinfo)#, :(->))
     return
   elseif head === :(.)
-    # arg₁ = args[1]
-    # if arg₁ isa Symbol
-    #   if (arg₁ ∉ keys(defined)) && (!Base.isdefined(mod, arg₁))
-    #     push!(arguments, arg₁)
-    #     args[1] = getgensym!(defined, arg₁)
-    #   end
     arg1 = args[1]
     if arg1 isa Symbol
       args[1] = get_sym!(defined, arguments, arg1, mod)
     else
       extractargs!(arguments, defined, arg1, mod)
     end
-    return
   elseif head === :(->)
     td = copy(defined)
     define1!(td, args)
