@@ -2,8 +2,8 @@ println("Starting tests with $(Threads.nthreads()) threads out of `Sys.CPU_THREA
 using Polyester, Aqua, ForwardDiff
 using Test
 
-function bsin!(y,x)
-  @batch for i ∈ eachindex(y,x)
+function bsin!(y,x,r=eachindex(y,x))
+  @batch for i ∈ r
     y[i] = sin(x[i])
   end
   return y
@@ -96,6 +96,7 @@ function issue25!(dest, x, y)
     dest
 end
 
+
 @testset "Range Map" begin
 
     x = rand(1024); y = rand(length(x)); z = similar(x);
@@ -129,9 +130,11 @@ end
 
     @test slow_cheap(1000, "9") ≈ slow_single_thread(1000,"9")
 
-    x = randn(100_000); y = similar(x);
-    @test bsin!(y, x) == sin.(x)
-    @test bcos!(y, x) == cos.(x)
+    x = randn(100_000); y = similar(x); z = similar(y);
+    @test bsin!(y, x) == (z .= sin.(x))
+    @test bcos!(y, x) == (z .= cos.(x))
+    @views z[1:3:length(x)] .= sin.(x[1:3:length(x)])
+    @test bsin!(y, x, 1:3:length(x)) == z
     @test sum(sin,x) ≈ sin_batch_sum(x)
     @test sum(sin,1:9) ≈ sin_batch_sum(1:9)
   

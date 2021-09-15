@@ -123,7 +123,7 @@ Base.iterate(::NoLoop) = (NoLoop(), NoLoop())
 Base.iterate(::NoLoop, ::NoLoop) = nothing
 @inline splitloop(x) = NoLoop(), x, CombineIndices()
 struct CombineIndices end
-@inline splitloop(x::AbstractUnitRange) = NoLoop(), x, CombineIndices()
+@inline splitloop(x::AbstractRange) = NoLoop(), x, CombineIndices()
 @inline function splitloop(x::CartesianIndices)
   axes = x.indices
   CartesianIndices(Base.front(axes)), last(axes), CombineIndices()
