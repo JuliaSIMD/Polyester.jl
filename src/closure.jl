@@ -15,41 +15,45 @@ extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, sym, mod) 
 #   end
 #   nothing
 # end
-function define_tup!(defined::Dict{Symbol,Symbol}, ex::Expr)
+function define_tup!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, ex::Expr, mod)
   for (i, a) ∈ enumerate(ex.args)
     if a isa Symbol
       ex.args[i] = getgensym!(defined, a)
-    else
+    elseif Meta.isexpr(a, :tuple)
       define_tup!(defined, a)
+    elseif Meta.isexpr(a, :ref)
+      extractargs!(arguments, defined, a, mod)
+    else
+      throw("Don't know how to handle:\n $a")
     end
   end
 end
-function define1!(defined::Dict{Symbol,Symbol}, x::Vector{Any})
+function define1!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, x::Vector{Any}, mod)
   s = x[1]
   if s isa Symbol
     x[1] = getgensym!(defined, s)
   else
-    define_tup!(defined, s::Expr)
+    define_tup!(arguments, defined, s::Expr, mod)
   end
 end
-function define_induction_variables!(defined::Dict{Symbol,Symbol}, ex::Expr) # add `i` in `for i ∈ looprange` to `defined`
+function define_induction_variables!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, ex::Expr, mod) # add `i` in `for i ∈ looprange` to `defined`
   ex.head === :for || return
   loops = ex.args[1]
   if loops.head === :block
     for loop ∈ loops.args
-      define1!(defined, loop.args)
+      define1!(arguments, defined, loop.args, mod)
     end
   else
-    define1!(defined, loops.args)
+    define1!(arguments, defined, loops.args, mod)
   end
 end
 
-function extractargs_equal!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, args::Vector{Any})
+function extractargs_equal!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, args::Vector{Any}, mod)
   arg1 = first(args)
   if arg1 isa Symbol
     args[1] = getgensym!(defined, arg1)
   elseif Meta.isexpr(arg1, :tuple)
-    define_tup!(defined, arg1)
+    define_tup!(arguments, defined, arg1, mod)
   end
   nothing
 end
@@ -67,14 +71,14 @@ function get_sym!(defined::Dict{Symbol,Symbol}, arguments::Vector{Symbol}, arg::
   end
 end
 function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, expr::Expr, mod)
-  define_induction_variables!(defined, expr)
+  define_induction_variables!(arguments, defined, expr, mod)
   head = expr.head
   args = expr.args
   startind = 1
   if head === :call
     startind = 2
   elseif head === :(=)
-    extractargs_equal!(arguments, defined, args)
+    extractargs_equal!(arguments, defined, args, mod)
   elseif head ∈ (:inbounds, :loopinfo)#, :(->))
     return
   elseif head === :(.)
@@ -86,14 +90,14 @@ function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, e
     end
   elseif head === :(->)
     td = copy(defined)
-    define1!(td, args)
+    define1!(arguments::Vector{Symbol}, td, args, mod)
     extractargs!(arguments, td, args[1], mod)
     extractargs!(arguments, td, args[2], mod)
     return
   elseif (head === :local) || (head === :global)
     for (i,arg) in enumerate(args)
       if Meta.isexpr(arg, :(=))
-        extractargs_equal!(arguments, defined, arg.args)
+        extractargs_equal!(arguments, defined, arg.args, mod)
         args = arg.args
         startind = 2
       else
@@ -195,7 +199,7 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
   # arguments = Symbol[]#loop_offs, loop_step]
   arguments = Symbol[innerloop, rcombiner]#loop_offs, loop_step]
   defined = Dict{Symbol,Symbol}(loop_offs => loop_offs, loop_step => loop_step)
-  define_induction_variables!(defined, ex)
+  define_induction_variables!(arguments, defined, ex, mod)
   firstloop = ex.args[1]
   if firstloop.head === :block
     secondaryloopsargs = firstloop.args[2:end]
