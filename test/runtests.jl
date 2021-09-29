@@ -230,6 +230,23 @@ end
         Polyester.threaded_gradient!(f, view(dx, start%Int:stop%Int), view(x, start%Int:stop%Int), ForwardDiff.Chunk(8))
     end;
     @test dx ≈ dxref
+
+    dxref = similar(x, 100, 800);
+    dx = similar(dxref);
+    yref = similar(x, 100);
+    y = similar(x, 100);
+    A = randn(100, 800)
+    g!(y, x) = (y .= A*x)
+    g(x) = A*x
+
+    Polyester.threaded_jacobian!(g, dx, x, ForwardDiff.Chunk(8));
+    ForwardDiff.jacobian!(dxref, g, x, ForwardDiff.JacobianConfig(g, x, ForwardDiff.Chunk(8), nothing));
+    @test dx ≈ dxref
+
+    Polyester.threaded_jacobian!(g!, y, dx, x, ForwardDiff.Chunk(8));
+    ForwardDiff.jacobian!(dxref, g!, yref, x, ForwardDiff.JacobianConfig(g!, yref, x, ForwardDiff.Chunk(8), nothing));
+    @test dx ≈ dxref
+    @test y ≈ yref
 end
 
 @testset "Non-UnitRange loops" begin
