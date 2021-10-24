@@ -235,7 +235,7 @@ end
     dx = similar(dxref);
     yref = similar(x, 100);
     y = similar(x, 100);
-    A = randn(100, 800)
+    A = randn(100, 800);
     g!(y, x) = (y .= A*x)
     g(x) = A*x
 

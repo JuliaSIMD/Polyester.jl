@@ -153,7 +153,7 @@ function evaluate_f_and_jacobian_chunks!(f!::F, (y,Δx,x), start, stop, ::Forwar
         
         # extract part of the Jacobian
         ForwardDiff.extract_jacobian_chunk!(Nothing, Δx_reshaped, ydual, lastchunkindex, lastchunksize)
-        map!(d -> ForwardDiff.value(d), y, ydual)
+        map!(ForwardDiff.value, y, ydual)
     end
 end
 
