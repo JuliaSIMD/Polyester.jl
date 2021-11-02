@@ -12,7 +12,7 @@ The primary API is `@batch`, which can be used in place of `Threads.@threads`.
 Lets look at a simple benchmark.
 ```julia
 using Polyester, LinearAlgebra, BenchmarkHistograms
-# One thread per core, the default
+# Single threaded.
 function axpy_serial!(y, a, x)
     @inbounds for i in eachindex(y,x)
         y[i] = muladd(a, x[i], y[i])
