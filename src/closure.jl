@@ -6,7 +6,7 @@ function getgensym!(defined::Dict{Symbol,Symbol}, s::Symbol)
   return snew
 end
 
-extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, sym, mod) = nothing
+extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, sym, mod; skipsymbol=:()) = nothing
 # function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, sym::Symbol, mod)
 #   if ((sym ∉ keys(defined)) && sym ∉ (:nothing, :(+), :(*), :(-), :(/), :(÷), :(<<), :(>>), :(>>>), :zero, :one)) && !Base.isdefined(mod, sym)
 #     @show getgensym!(defined, sym)
@@ -70,7 +70,7 @@ function get_sym!(defined::Dict{Symbol,Symbol}, arguments::Vector{Symbol}, arg::
     get(defined, arg, arg)
   end
 end
-function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, expr::Expr, mod)
+function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, expr::Expr, mod; skipsymbol=:())
   define_induction_variables!(arguments, defined, expr, mod)
   head = expr.head
   args = expr.args
@@ -86,13 +86,13 @@ function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, e
     if arg1 isa Symbol
       args[1] = get_sym!(defined, arguments, arg1, mod)
     else
-      extractargs!(arguments, defined, arg1, mod)
+      extractargs!(arguments, defined, arg1, mod; skipsymbol=skipsymbol)
     end
   elseif head === :(->)
     td = copy(defined)
     define1!(arguments::Vector{Symbol}, td, args, mod)
-    extractargs!(arguments, td, args[1], mod)
-    extractargs!(arguments, td, args[2], mod)
+    extractargs!(arguments, td, args[1], mod; skipsymbol=skipsymbol)
+    extractargs!(arguments, td, args[2], mod; skipsymbol=skipsymbol)
     return
   elseif (head === :local) || (head === :global)
     for (i,arg) in enumerate(args)
@@ -111,12 +111,12 @@ function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, e
   for i ∈ startind:length(args)
     argᵢ = args[i]
     (head === :ref && ((argᵢ === :end) || (argᵢ === :begin))) && continue
-    if argᵢ isa Symbol
+    if argᵢ isa Symbol && !(argᵢ === skipsymbol)
       args[i] = get_sym!(defined, arguments, argᵢ, mod)
     elseif argᵢ isa Expr
-      extractargs!(arguments, defined, argᵢ, mod)
+      extractargs!(arguments, defined, argᵢ, mod; skipsymbol=skipsymbol)
     else
-      extractargs!(arguments, defined, argᵢ, mod)
+      extractargs!(arguments, defined, argᵢ, mod; skipsymbol=skipsymbol)
     end
   end
   return
@@ -184,7 +184,7 @@ function maybestatic!(_expr)::Expr
   end
   esc(expr)
 end
-function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
+function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadlocal, mod)
   Meta.isexpr(exorig, :for, 2) || throw(ArgumentError("Expression invalid; should be a for loop."))
   ex = copy(exorig)
   loop_sym = Symbol("##LOOP##")
@@ -195,6 +195,12 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
   loop_offs = Symbol("##LOOPOFFSET##")
   innerloop = Symbol("##inner##loop##")
   rcombiner = Symbol("##split##recombined##")
+
+  if threadlocal === :()
+    threadlocal_name = :()
+  else
+    threadlocal_name = threadlocal.args[1]
+  end
 
   # arguments = Symbol[]#loop_offs, loop_step]
   arguments = Symbol[innerloop, rcombiner]#loop_offs, loop_step]
@@ -242,11 +248,11 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
   end
   if ex.args[1].head === :block
     for i ∈ 2:length(ex.args[1].args)
-      extractargs!(arguments, defined, ex.args[1].args[i], mod)
+      extractargs!(arguments, defined, ex.args[1].args[i], mod; skipsymbol=threadlocal_name)
     end
   end
   for i ∈ 2:length(ex.args)
-    extractargs!(arguments, defined, ex.args[i], mod)
+    extractargs!(arguments, defined, ex.args[i], mod; skipsymbol=threadlocal_name)
   end
   # @show ex.args[1] firstloop body
   # if length(ex.args[
@@ -286,12 +292,26 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
     # end
   end
   closure = Symbol("##closure##")
+  all_threadlocals = Symbol("##all_threadlocals##")
+  if threadlocal === :()
+    threadlocal_repack_single = :()
+    threadlocal_init = :()
+    threadlocal_prep = :()
+    threadlocal_unpack = :()
+  else
+    threadlocal_repack_single = :( $(threadlocal_name) = [$(threadlocal_name)] )
+    threadlocal_init = :( $threadlocal_name = $all_threadlocals = [] )
+    threadlocal_prep = :( append!($(esc(all_threadlocals)), [$(esc(threadlocal.args[2])) for _ in 1:$(threadtup.args[2])]) )
+    threadlocal_unpack = :( $(threadlocal_name) = $(all_threadlocals)[var"##LOOP_STEP##"] ) # TODO this is wrong
+  end
+  push!(q.args, (threadlocal_prep))
   args = Expr(:tuple, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))
   closureq = quote
     $closure = let
       @inline ($args, var"##SUBSTART##"::Int, var"##SUBSTOP##"::Int) -> begin
         var"##LOOPSTART##" = var"##SUBSTART##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - var"##LOOP_STEP##"
         var"##LOOP_STOP##" = var"##SUBSTOP##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - var"##LOOP_STEP##"
+        $threadlocal_unpack
         @inbounds begin
           $excomb
         end
@@ -302,16 +322,21 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, mod)
   push!(q.args, esc(closureq))
   batchcall = Expr(:call, batch, esc(closure), threadtup, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))
   for a ∈ arguments
+    a === threadlocal_name && continue
     push!(args.args, get(defined,a,a))
     push!(batchcall.args, esc(a))
   end
   push!(q.args, batchcall)
   quote
     if $num_threads() == 1
+      $(esc(threadlocal)) # Initialize threadlocal storage
       let
         $(esc(exorig))
       end
+      $(esc(threadlocal_repack_single))
+       # Package all local storages in a list
     else
+      $(esc(threadlocal_init))
       let
         $q
       end
@@ -353,7 +378,7 @@ You can pass both `per=(core/thread)` and `minbatch=N` options at the same time,
 macro batch(ex)
   enclose(macroexpand(__module__, ex), 0, 1, :core, __module__)
 end
-function interpret_kwarg(arg, reserve_per = 0, minbatch = 1, per = :core)
+function interpret_kwarg(arg, reserve_per = 0, minbatch = 1, per = :core, threadlocal = :())
   a = arg.args[1]
   v = arg.args[2]
   if a === :reserve
@@ -364,23 +389,26 @@ function interpret_kwarg(arg, reserve_per = 0, minbatch = 1, per = :core)
   elseif a === :per
     per = v::Symbol
     @assert (per === :core) | (per === :thread)
+  elseif a === :threadlocal
+    @assert typeof(v)<:Expr && v.head==:(=) "`threadlocal` has to be of the form `<a_variable_name> = <expr>`"
+    threadlocal = v
   else
     throw(ArgumentError("kwarg $(a) not recognized."))
   end
-  reserve_per, minbatch, per
+  reserve_per, minbatch, per, threadlocal
 end
 macro batch(arg1, ex)
-  reserve, minbatch, per = interpret_kwarg(arg1)
-  enclose(macroexpand(__module__, ex), reserve, minbatch, per, __module__)
+  reserve, minbatch, per, threadlocal = interpret_kwarg(arg1)
+  enclose(macroexpand(__module__, ex), reserve, minbatch, per, threadlocal, __module__)
 end
 macro batch(arg1, arg2, ex)
-  reserve, minbatch, per = interpret_kwarg(arg1)
-  reserve, minbatch, per = interpret_kwarg(arg2, reserve, minbatch, per)
-  enclose(macroexpand(__module__, ex), reserve, minbatch, per, __module__)
+  reserve, minbatch, per, threadlocal = interpret_kwarg(arg1)
+  reserve, minbatch, per, threadlocal = interpret_kwarg(arg2, reserve, minbatch, per, threadlocal)
+  enclose(macroexpand(__module__, ex), reserve, minbatch, per, threadlocal, __module__)
 end
 macro batch(arg1, arg2, arg3, ex)
-  reserve, minbatch, per = interpret_kwarg(arg1)
-  reserve, minbatch, per = interpret_kwarg(arg2, reserve, minbatch, per)
-  reserve, minbatch, per = interpret_kwarg(arg3, reserve, minbatch, per)
-  enclose(macroexpand(__module__, ex), reserve, minbatch, per, __module__)
+  reserve, minbatch, per, threadlocal = interpret_kwarg(arg1)
+  reserve, minbatch, per, threadlocal = interpret_kwarg(arg2, reserve, minbatch, per, threadlocal)
+  reserve, minbatch, per, threadlocal = interpret_kwarg(arg3, reserve, minbatch, per, threadlocal)
+  enclose(macroexpand(__module__, ex), reserve, minbatch, per, threadlocal, __module__)
 end
