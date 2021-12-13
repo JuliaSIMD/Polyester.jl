@@ -381,6 +381,6 @@ end
 macro batch(arg1, arg2, arg3, ex)
   reserve, minbatch, per = interpret_kwarg(arg1)
   reserve, minbatch, per = interpret_kwarg(arg2, reserve, minbatch, per)
-  reserve, minbatch, per = interpret_kwarg(arg2, reserve, minbatch, per)
+  reserve, minbatch, per = interpret_kwarg(arg3, reserve, minbatch, per)
   enclose(macroexpand(__module__, ex), reserve, minbatch, per, __module__)
 end
