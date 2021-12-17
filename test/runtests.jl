@@ -350,6 +350,14 @@ end
     threadlocal
   end
   @test length(inits)==1 || inits[1]!=inits[2]
+  # check that types are respected
+  settingtype = let
+    @batch threadlocal=myinitA()::Float16 for i in 0:9
+        threadlocal += 1
+    end
+    threadlocal
+  end
+  @test eltype(settingtype)==Float16
 end
 
 if VERSION ≥ v"1.6"

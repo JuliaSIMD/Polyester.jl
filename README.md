@@ -435,3 +435,14 @@ index 5, thread 3, local storage 51
 index 2, thread 2, local storage 16
 Any[32, 17, 52, 35]
 ```
+
+Optionally, a type can be specified for the thread-local storage:
+```julia
+julia> let
+           @batch threadlocal=rand(10:99)::Float16 for i in 0:9
+           end
+           println(threadlocal)
+       end
+
+Float16[83.0, 90.0, 27.0, 65.0
+```

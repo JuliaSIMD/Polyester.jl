@@ -288,10 +288,10 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
     # end
   end
   closure = Symbol("##closure##")
-
+  threadlocal, threadlocal_type = threadlocal
   threadlocal_init_single   = threadlocal == :() ? :() : :( $threadlocal_var = $threadlocal )
-  threadlocal_repack_single = threadlocal == :() ? :() : :( threadlocal = [threadlocal] )
-  threadlocal_init1         = threadlocal == :() ? :() : :( $threadlocal_var = Vector(undef, 0) )
+  threadlocal_repack_single = threadlocal == :() ? :() : :( threadlocal = $threadlocal_type[threadlocal] )
+  threadlocal_init1         = threadlocal == :() ? :() : :( $threadlocal_var = Vector{$threadlocal_type}(undef, 0) )
   threadlocal_init2         = threadlocal == :() ? :() : quote
     resize!($(esc(threadlocal_var)),max(1,$(threadtup.args[2]))) # Why is the max necessary?
     for i in eachindex($(esc(threadlocal_var)))
@@ -350,10 +350,10 @@ Create a thread-local storage used in the loop.
 
     @batch localthread=init() for i in Iter; ...; end
 
-The `init` function will be called at the start at each thread.
-`localthread` will refer to storage local for the thread.
-At the end of the loop, a `localthread` vector containing all the thread-local values
-will be available.
+The `init` function will be called at the start at each thread. `localthread` will
+refer to storage local for the thread. At the end of the loop, a `localthread`
+vector containing all the thread-local values will be available. A type can be specified
+with `threadlocal=init()::Type`.
 
 Evaluate at least N iterations per thread. Will use at most `length(Iter) ÷ N` threads.
 
@@ -380,9 +380,9 @@ You can pass both `per=(core/thread)` and `minbatch=N` options at the same time,
     @batch minbatch=5000 per=core   for i in Iter; ...; end
 """
 macro batch(ex)
-  enclose(macroexpand(__module__, ex), 0, 1, :core, :(), __module__)
+  enclose(macroexpand(__module__, ex), 0, 1, :core, (:(),:Any), __module__)
 end
-function interpret_kwarg(arg, reserve_per = 0, minbatch = 1, per = :core, threadlocal = :())
+function interpret_kwarg(arg, reserve_per = 0, minbatch = 1, per = :core, threadlocal = (:(),:Any))
   a = arg.args[1]
   v = arg.args[2]
   if a === :reserve
@@ -394,7 +394,11 @@ function interpret_kwarg(arg, reserve_per = 0, minbatch = 1, per = :core, thread
     per = v::Symbol
     @assert (per === :core) | (per === :thread)
   elseif a === :threadlocal
-    threadlocal = v
+    if isa(v,Expr) && v.head==:(::)
+      threadlocal = v.args
+    else
+      threadlocal = (v, :Any)
+    end
   else
     throw(ArgumentError("kwarg $(a) not recognized."))
   end
