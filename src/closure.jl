@@ -346,6 +346,15 @@ Evaluate the loop on multiple threads.
 
     @batch minbatch=N for i in Iter; ...; end
 
+Create a thread-local storage used in the loop.
+
+    @batch localthread=init() for i in Iter; ...; end
+
+The `init` function will be called at the start at each thread.
+`localthread` will refer to storage local for the thread.
+At the end of the loop, a `localthread` vector containing all the thread-local values
+will be available.
+
 Evaluate at least N iterations per thread. Will use at most `length(Iter) ÷ N` threads.
 
     @batch per=core for i in Iter; ...; end

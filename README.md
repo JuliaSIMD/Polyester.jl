@@ -412,3 +412,26 @@ Note that `@batch` defaults to using up to one thread per physical core, instead
 is because [LoopVectorization.jl](https://github.com/JuliaSIMD/LoopVectorization.jl) currently only uses up to 1 thread per physical core, and switching the number of
 threads incurs some overhead. See the docstring on `@batch` (i.e., `?@batch` in a Julia REPL) for some more discussion.
 
+You also can define local storage for each thread, providing a vector containing each of the local storages at the end.
+
+```julia
+julia> let
+           @batch threadlocal=rand(10:99) for i in 0:9
+               println("index $i, thread $(Threads.threadid()), local storage $threadlocal")
+               threadlocal += 1
+           end
+           println(threadlocal)
+       end
+
+index 8, thread 1, local storage 30
+index 3, thread 3, local storage 49
+index 9, thread 1, local storage 31
+index 6, thread 4, local storage 33
+index 0, thread 2, local storage 14
+index 4, thread 3, local storage 50
+index 7, thread 4, local storage 34
+index 1, thread 2, local storage 15
+index 5, thread 3, local storage 51
+index 2, thread 2, local storage 16
+Any[32, 17, 52, 35]
+```
