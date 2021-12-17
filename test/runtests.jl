@@ -300,6 +300,58 @@ Base.eachindex(e::Iterators.Enumerate{LazyTree{T}}) where T = eachindex(e.itr)
   evt = 5
 end
 
+@testset "local thread storate" begin
+  local1 = let
+    @batch threadlocal=0 for i in 0:9
+        threadlocal += 1
+    end
+    sum(threadlocal)
+  end
+  local2 = let
+    @batch minbatch=5 threadlocal=0 for i in 0:9
+        threadlocal += 1
+    end
+    sum(threadlocal)
+  end
+  local3 = let
+    @batch per=core threadlocal=0 for i in 0:9
+        threadlocal += 1
+    end
+    sum(threadlocal)
+  end
+  local4 = let
+    @batch per=core minbatch=100 threadlocal=0 for i in 0:9
+        threadlocal += 1
+    end
+    sum(threadlocal)
+  end
+  myinitA() = 0
+  local5 = let
+    @batch threadlocal=myinitA() for i in 0:9
+        threadlocal += 1
+    end
+    sum(threadlocal)
+  end
+  myinitB() = [0]
+  local6 = let
+    @batch threadlocal=myinitB() for i in 0:9
+        threadlocal .+= 1
+    end
+    sum(threadlocal)[1]
+  end
+  @test local1==local2==local3==local4==local5==local6
+  # check that each thread has a separate init
+  myvar = 0
+  myinitC() = myvar+=1
+  inits = let
+    @batch threadlocal=myinitC() for i in 0:9
+        threadlocal += 1
+    end
+    threadlocal
+  end
+  @test length(inits)==1 || inits[1]!=inits[2]
+end
+
 if VERSION ≥ v"1.6"
   println("Package tests complete. Running `Aqua` checks.")
   Aqua.test_all(Polyester)

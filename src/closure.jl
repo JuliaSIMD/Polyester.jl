@@ -371,7 +371,7 @@ You can pass both `per=(core/thread)` and `minbatch=N` options at the same time,
     @batch minbatch=5000 per=core   for i in Iter; ...; end
 """
 macro batch(ex)
-  enclose(macroexpand(__module__, ex), 0, 1, :core, __module__)
+  enclose(macroexpand(__module__, ex), 0, 1, :core, :(), __module__)
 end
 function interpret_kwarg(arg, reserve_per = 0, minbatch = 1, per = :core, threadlocal = :())
   a = arg.args[1]
