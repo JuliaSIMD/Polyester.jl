@@ -298,13 +298,13 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
       $(esc(threadlocal_var))[i] = $(esc(threadlocal))
     end
   end 
-  threadlocal_get           = threadlocal == :() ? :() : :( $threadlocal_var_gen = $threadlocal_var[Threads.threadid()] )
-  threadlocal_set           = threadlocal == :() ? :() : :( $threadlocal_var[Threads.threadid()] = $threadlocal_var_gen )
+  threadlocal_get           = threadlocal == :() ? :() : :( $threadlocal_var_gen = $threadlocal_var[var"##THREAD##"] )
+  threadlocal_set           = threadlocal == :() ? :() : :( $threadlocal_var[var"##THREAD##"] = $threadlocal_var_gen )
   push!(q.args, threadlocal_init2)
   args = Expr(:tuple, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))
   closureq = quote
     $closure = let
-      @inline ($args, var"##SUBSTART##"::Int, var"##SUBSTOP##"::Int) -> begin
+      @inline ($args, var"##SUBSTART##"::Int, var"##SUBSTOP##"::Int, var"##THREAD##"::Int) -> begin
         var"##LOOPSTART##" = var"##SUBSTART##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - var"##LOOP_STEP##"
         var"##LOOP_STOP##" = var"##SUBSTOP##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - var"##LOOP_STEP##"
         $threadlocal_get

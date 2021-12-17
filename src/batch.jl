@@ -5,7 +5,8 @@ function (b::BatchClosure{F,A,B})(p::Ptr{UInt}) where {F,A,B}
   (offset, args) = ThreadingUtilities.load(p, A, 2*sizeof(UInt))
   (offset, start) = ThreadingUtilities.load(p, UInt, offset)
   (offset, stop ) = ThreadingUtilities.load(p, UInt, offset)
-  b.f(args, (start+one(UInt))%Int, stop%Int)
+  (offset, i ) = ThreadingUtilities.load(p, UInt, offset)
+  b.f(args, (start+one(UInt))%Int, stop%Int, i%Int)
   # B && free_local_threads!()
   nothing
 end
@@ -15,17 +16,18 @@ end
   @cfunction($bc, Cvoid, (Ptr{UInt},))
 end
 
-@inline function setup_batch!(p::Ptr{UInt}, fptr::Ptr{Cvoid}, argtup, start::UInt, stop::UInt)
+@inline function setup_batch!(p::Ptr{UInt}, fptr::Ptr{Cvoid}, argtup, start::UInt, stop::UInt, i::UInt)
   offset = ThreadingUtilities.store!(p, fptr, sizeof(UInt))
   offset = ThreadingUtilities.store!(p, argtup, offset)
   offset = ThreadingUtilities.store!(p, start, offset)
   offset = ThreadingUtilities.store!(p, stop, offset)
+  offset = ThreadingUtilities.store!(p, i, offset)
   nothing
 end
-@inline function launch_batched_thread!(cfunc, tid, argtup, start, stop)
+@inline function launch_batched_thread!(cfunc, tid, argtup, start, stop, i)
   fptr = Base.unsafe_convert(Ptr{Cvoid}, cfunc)
-  ThreadingUtilities.launch(tid, fptr, argtup, start, stop) do p, fptr, argtup, start, stop
-    setup_batch!(p, fptr, argtup, start, stop)
+  ThreadingUtilities.launch(tid, fptr, argtup, start, stop, i) do p, fptr, argtup, start, stop, i
+    setup_batch!(p, fptr, argtup, start, stop, i)
   end
 end
 _extract_params(::Type{T}) where {T<:Tuple} = T.parameters
@@ -73,12 +75,12 @@ end
         tz += 0x00000001
         tid += tz
         tm >>>= tz
-        launch_batched_thread!(cfunc, tid, argtup, start, stop)
+        launch_batched_thread!(cfunc, tid, argtup, start, stop, i%UInt)
         start = stop
       end
       Nr -= nthread
     end
-    f!(arguments, (start+one(UInt)) % Int, ulen % Int)
+    f!(arguments, (start+one(UInt)) % Int, ulen % Int, (sum(nthread_tuple)+1)%Int)
     for (threadmask, nthread, torelease) ∈ zip(threadmask_tuple, nthread_tuple, torelease_tuple)
       tm = mask(UnsignedIteratorEarlyStop(threadmask, nthread))
       tid = 0x00000000
@@ -208,7 +210,7 @@ end
   nthread = sum(nthreads)
   ulen = len % UInt
   if nthread % Int32 ≤ zero(Int32)
-    f!(args, one(Int), ulen % Int)
+    f!(args, one(Int), ulen % Int, 1)
     return
   end
   nbatch = nthread + one(nthread)

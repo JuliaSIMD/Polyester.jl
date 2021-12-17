@@ -46,7 +46,7 @@ function threaded_gradient!(f::F, Δx::AbstractVector, x::AbstractVector, ::Forw
     N = length(x)
     d = cld_fast(N, C)
     r = Ref{eltype(Δx)}()
-    batch((d,min(d,num_threads())), r, Δx, x) do rΔxx,start,stop
+    batch((d,min(d,num_threads())), r, Δx, x) do rΔxx,start,stop,ti
         evaluate_chunks!(f, rΔxx, start, stop, ForwardDiff.Chunk{C}())
     end
     r[]
@@ -103,7 +103,7 @@ end
 function threaded_jacobian!(f::F, Δx::AbstractArray, x::AbstractArray, ::ForwardDiff.Chunk{C}) where {F,C}
     N = length(x)
     d = cld_fast(N, C)
-    batch((d,min(d,num_threads())), Δx, x) do Δxx,start,stop
+    batch((d,min(d,num_threads())), Δx, x) do Δxx,start,stop,ti
         evaluate_jacobian_chunks!(f, Δxx, start, stop, ForwardDiff.Chunk{C}())
     end
     return Δx
@@ -160,7 +160,7 @@ end
 function threaded_jacobian!(f!::F, y::AbstractArray, Δx::AbstractArray, x::AbstractArray, ::ForwardDiff.Chunk{C}) where {F,C}
     N = length(x)
     d = cld_fast(N, C)
-    batch((d,min(d,num_threads())), y, Δx, x) do yΔxx,start,stop
+    batch((d,min(d,num_threads())), y, Δx, x) do yΔxx,start,stop,ti
         evaluate_f_and_jacobian_chunks!(f!, yΔxx, start, stop, ForwardDiff.Chunk{C}())
     end
     Δx
