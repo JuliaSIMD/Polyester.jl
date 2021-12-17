@@ -6,7 +6,7 @@ function getgensym!(defined::Dict{Symbol,Symbol}, s::Symbol)
   return snew
 end
 
-extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, sym, mod; skipsymbol=:()) = nothing
+extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, sym, mod) = nothing
 # function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, sym::Symbol, mod)
 #   if ((sym ∉ keys(defined)) && sym ∉ (:nothing, :(+), :(*), :(-), :(/), :(÷), :(<<), :(>>), :(>>>), :zero, :one)) && !Base.isdefined(mod, sym)
 #     @show getgensym!(defined, sym)
@@ -70,7 +70,7 @@ function get_sym!(defined::Dict{Symbol,Symbol}, arguments::Vector{Symbol}, arg::
     get(defined, arg, arg)
   end
 end
-function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, expr::Expr, mod; skipsymbol=:())
+function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, expr::Expr, mod)
   define_induction_variables!(arguments, defined, expr, mod)
   head = expr.head
   args = expr.args
@@ -86,13 +86,13 @@ function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, e
     if arg1 isa Symbol
       args[1] = get_sym!(defined, arguments, arg1, mod)
     else
-      extractargs!(arguments, defined, arg1, mod; skipsymbol=skipsymbol)
+      extractargs!(arguments, defined, arg1, mod)
     end
   elseif head === :(->)
     td = copy(defined)
     define1!(arguments::Vector{Symbol}, td, args, mod)
-    extractargs!(arguments, td, args[1], mod; skipsymbol=skipsymbol)
-    extractargs!(arguments, td, args[2], mod; skipsymbol=skipsymbol)
+    extractargs!(arguments, td, args[1], mod)
+    extractargs!(arguments, td, args[2], mod)
     return
   elseif (head === :local) || (head === :global)
     for (i,arg) in enumerate(args)
@@ -111,12 +111,12 @@ function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, e
   for i ∈ startind:length(args)
     argᵢ = args[i]
     (head === :ref && ((argᵢ === :end) || (argᵢ === :begin))) && continue
-    if argᵢ isa Symbol && !(argᵢ === skipsymbol)
+    if argᵢ isa Symbol
       args[i] = get_sym!(defined, arguments, argᵢ, mod)
     elseif argᵢ isa Expr
-      extractargs!(arguments, defined, argᵢ, mod; skipsymbol=skipsymbol)
+      extractargs!(arguments, defined, argᵢ, mod)
     else
-      extractargs!(arguments, defined, argᵢ, mod; skipsymbol=skipsymbol)
+      extractargs!(arguments, defined, argᵢ, mod)
     end
   end
   return
@@ -195,16 +195,12 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
   loop_offs = Symbol("##LOOPOFFSET##")
   innerloop = Symbol("##inner##loop##")
   rcombiner = Symbol("##split##recombined##")
-
-  if threadlocal === :()
-    threadlocal_name = :()
-  else
-    threadlocal_name = threadlocal.args[1]
-  end
+  threadlocal_var = Symbol("threadlocal")
 
   # arguments = Symbol[]#loop_offs, loop_step]
   arguments = Symbol[innerloop, rcombiner]#loop_offs, loop_step]
   defined = Dict{Symbol,Symbol}(loop_offs => loop_offs, loop_step => loop_step)
+  threadlocal_var_gen = getgensym!(defined, threadlocal_var)
   define_induction_variables!(arguments, defined, ex, mod)
   firstloop = ex.args[1]
   if firstloop.head === :block
@@ -248,11 +244,11 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
   end
   if ex.args[1].head === :block
     for i ∈ 2:length(ex.args[1].args)
-      extractargs!(arguments, defined, ex.args[1].args[i], mod; skipsymbol=threadlocal_name)
+      extractargs!(arguments, defined, ex.args[1].args[i], mod)
     end
   end
   for i ∈ 2:length(ex.args)
-    extractargs!(arguments, defined, ex.args[i], mod; skipsymbol=threadlocal_name)
+    extractargs!(arguments, defined, ex.args[i], mod)
   end
   # @show ex.args[1] firstloop body
   # if length(ex.args[
@@ -292,29 +288,30 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
     # end
   end
   closure = Symbol("##closure##")
-  all_threadlocals = Symbol("##all_threadlocals##")
-  if threadlocal === :()
-    threadlocal_repack_single = :()
-    threadlocal_init = :()
-    threadlocal_prep = :()
-    threadlocal_unpack = :()
-  else
-    threadlocal_repack_single = :( $(threadlocal_name) = [$(threadlocal_name)] )
-    threadlocal_init = :( $threadlocal_name = $all_threadlocals = [] )
-    threadlocal_prep = :( append!($(esc(all_threadlocals)), [$(esc(threadlocal.args[2])) for _ in 1:$(threadtup.args[2])]) )
-    threadlocal_unpack = :( $(threadlocal_name) = $(all_threadlocals)[var"##LOOP_STEP##"] ) # TODO this is wrong
-  end
-  push!(q.args, (threadlocal_prep))
+
+  threadlocal_init_single   = threadlocal == :() ? :() : :( $threadlocal_var = $threadlocal )
+  threadlocal_repack_single = threadlocal == :() ? :() : :( threadlocal = [threadlocal] )
+  threadlocal_init1         = threadlocal == :() ? :() : :( $threadlocal_var = Vector(undef, 0) )
+  threadlocal_init2         = threadlocal == :() ? :() : quote
+    resize!($(esc(threadlocal_var)),max(1,$(threadtup.args[2]))) # Why is the max necessary?
+    for i in eachindex($(esc(threadlocal_var)))
+      $(esc(threadlocal_var))[i] = $(esc(threadlocal))
+    end
+  end 
+  threadlocal_get           = threadlocal == :() ? :() : :( $threadlocal_var_gen = $threadlocal_var[Threads.threadid()] )
+  threadlocal_set           = threadlocal == :() ? :() : :( $threadlocal_var[Threads.threadid()] = $threadlocal_var_gen )
+  push!(q.args, threadlocal_init2)
   args = Expr(:tuple, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))
   closureq = quote
     $closure = let
       @inline ($args, var"##SUBSTART##"::Int, var"##SUBSTOP##"::Int) -> begin
         var"##LOOPSTART##" = var"##SUBSTART##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - var"##LOOP_STEP##"
         var"##LOOP_STOP##" = var"##SUBSTOP##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - var"##LOOP_STEP##"
-        $threadlocal_unpack
+        $threadlocal_get
         @inbounds begin
           $excomb
         end
+        $threadlocal_set
         nothing
       end
     end
@@ -322,21 +319,19 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
   push!(q.args, esc(closureq))
   batchcall = Expr(:call, batch, esc(closure), threadtup, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))
   for a ∈ arguments
-    a === threadlocal_name && continue
     push!(args.args, get(defined,a,a))
     push!(batchcall.args, esc(a))
   end
   push!(q.args, batchcall)
   quote
     if $num_threads() == 1
-      $(esc(threadlocal)) # Initialize threadlocal storage
+      $(esc(threadlocal_init_single)) # Initialize threadlocal storage
       let
         $(esc(exorig))
       end
-      $(esc(threadlocal_repack_single))
-       # Package all local storages in a list
+      $(esc(threadlocal_repack_single)) # Put the single-thread threadlocal storage in a single-element Vector
     else
-      $(esc(threadlocal_init))
+      $(esc(threadlocal_init1))
       let
         $q
       end
@@ -390,7 +385,6 @@ function interpret_kwarg(arg, reserve_per = 0, minbatch = 1, per = :core, thread
     per = v::Symbol
     @assert (per === :core) | (per === :thread)
   elseif a === :threadlocal
-    @assert typeof(v)<:Expr && v.head==:(=) "`threadlocal` has to be of the form `<a_variable_name> = <expr>`"
     threadlocal = v
   else
     throw(ArgumentError("kwarg $(a) not recognized."))
