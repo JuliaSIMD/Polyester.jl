@@ -290,7 +290,7 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
   closure = Symbol("##closure##")
   threadlocal, threadlocal_type = threadlocal
   threadlocal_init_single   = threadlocal == :() ? :() : :( $threadlocal_var = $threadlocal )
-  threadlocal_repack_single = threadlocal == :() ? :() : :( threadlocal = $threadlocal_type[threadlocal] )
+  threadlocal_repack_single = threadlocal == :() ? :() : :( $threadlocal_var )
   threadlocal_init1         = threadlocal == :() ? :() : :( $threadlocal_var = Vector{$threadlocal_type}(undef, 0) )
   threadlocal_init2         = threadlocal == :() ? :() : :( resize!($(esc(threadlocal_var)),max(1,$(threadtup.args[2]))) )
   threadlocal_get           = threadlocal == :() ? :() : :( $threadlocal_var_gen = $threadlocal::$threadlocal_type )
@@ -328,11 +328,12 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
   push!(q.args, batchcall)
   quote
     if $num_threads() == 1
-      $(esc(threadlocal_init_single)) # Initialize threadlocal storage
-      let
+      single_thread_result = begin
+        $(esc(threadlocal_init_single)) # Initialize threadlocal storage
         $(esc(exorig))
+        $(esc(threadlocal_repack_single))
       end
-      $(esc(threadlocal_repack_single)) # Put the single-thread threadlocal storage in a single-element Vector
+      $(esc(threadlocal_var)) = [single_thread_result] # Put the single-thread threadlocal storage in a single-element Vector
     else
       $(esc(threadlocal_init1))
       let
