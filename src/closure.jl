@@ -292,13 +292,8 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
   threadlocal_init_single   = threadlocal == :() ? :() : :( $threadlocal_var = $threadlocal )
   threadlocal_repack_single = threadlocal == :() ? :() : :( threadlocal = $threadlocal_type[threadlocal] )
   threadlocal_init1         = threadlocal == :() ? :() : :( $threadlocal_var = Vector{$threadlocal_type}(undef, 0) )
-  threadlocal_init2         = threadlocal == :() ? :() : quote
-    resize!($(esc(threadlocal_var)),max(1,$(threadtup.args[2]))) # Why is the max necessary?
-    for i in eachindex($(esc(threadlocal_var)))
-      $(esc(threadlocal_var))[i] = $(esc(threadlocal))
-    end
-  end 
-  threadlocal_get           = threadlocal == :() ? :() : :( $threadlocal_var_gen = $threadlocal_var[var"##THREAD##"] )
+  threadlocal_init2         = threadlocal == :() ? :() : :( resize!($(esc(threadlocal_var)),max(1,$(threadtup.args[2]))) )
+  threadlocal_get           = threadlocal == :() ? :() : :( $threadlocal_var_gen = $threadlocal::$threadlocal_type )
   threadlocal_set           = threadlocal == :() ? :() : :( $threadlocal_var[var"##THREAD##"] = $threadlocal_var_gen )
   push!(q.args, threadlocal_init2)
   args = Expr(:tuple, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))

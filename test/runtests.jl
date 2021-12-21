@@ -351,13 +351,21 @@ end
   end
   @test length(inits)==1 || inits[1]!=inits[2]
   # check that types are respected
+  myinitD() = Float16(1.0)
   settingtype = let
-    @batch threadlocal=myinitA()::Float16 for i in 0:9
+    @batch threadlocal=myinitD()::Float16 for i in 0:9
         threadlocal += 1
     end
     threadlocal
   end
   @test eltype(settingtype)==Float16
+  settingabstype = let
+    @batch threadlocal=myinitD()::AbstractFloat for i in 0:9
+        threadlocal += 1
+    end
+    threadlocal
+  end
+  @test eltype(settingabstype)<:AbstractFloat
 end
 
 if VERSION ≥ v"1.6"
