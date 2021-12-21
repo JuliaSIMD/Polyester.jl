@@ -55,7 +55,7 @@ end
 function tmap!(f::F, args::Vararg{AbstractArray,K}) where {K,F}
     dest = first(args)
     N = length(dest)
-    mapfun! = (allargs, start, stop, ti) -> rangemap!(f, allargs, start, stop)
+    mapfun! = (allargs, start, stop) -> rangemap!(f, allargs, start, stop)
     batch(mapfun!, (N, num_threads()), args...)
     dest
 end
@@ -104,7 +104,7 @@ end
     println("Running `tmap!` test...")
     @test tmap!(foo, z, x, y) ≈ foo.(x, y)
 
-    function slow_task!((x, digits, n), j, k, ti)
+    function slow_task!((x, digits, n), j, k)
         start = 1 + (n * (j - 1)) ÷ num_threads()
         stop =  (n* k) ÷ num_threads()
         target = 0.0
@@ -163,7 +163,7 @@ end
 
 @testset "start and stop values" begin
     println("Running start and stop values tests...")
-    function record_start_stop!((start_indices, end_indices), start, stop, ti)
+    function record_start_stop!((start_indices, end_indices), start, stop)
       start_indices[Threads.threadid()] = start
       end_indices[Threads.threadid()] = stop
       sleep(1) # if task completes two quickly, the mainthread will start stealing work back.
@@ -193,7 +193,7 @@ end
     end
     vec_length = 20
     ts = TestStruct(["init" for i in 1:vec_length])
-    update_text!((ts, val), start, stop, ti) = ts.vec[start:stop] .= val
+    update_text!((ts, val), start, stop) = ts.vec[start:stop] .= val
     batch(update_text!, (vec_length, num_threads()), ts, "new_val")
     @test all(ts.vec .== "new_val")
 
@@ -226,7 +226,7 @@ end
     @test dx == dxref
 
     dx .= NaN;
-    batch((length(x), max(1,num_threads()>>1), 2), dx, x) do (dx,x), start, stop, ti
+    batch((length(x), max(1,num_threads()>>1), 2), dx, x) do (dx,x), start, stop
         Polyester.threaded_gradient!(f, view(dx, start%Int:stop%Int), view(x, start%Int:stop%Int), ForwardDiff.Chunk(8))
     end;
     @test dx ≈ dxref

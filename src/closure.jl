@@ -302,9 +302,14 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
   threadlocal_set           = threadlocal == :() ? :() : :( $threadlocal_var[var"##THREAD##"] = $threadlocal_var_gen )
   push!(q.args, threadlocal_init2)
   args = Expr(:tuple, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))
+  closure_args = if threadlocal == :()
+    :($args, var"##SUBSTART##"::Int, var"##SUBSTOP##"::Int)
+  else
+    :($args, var"##SUBSTART##"::Int, var"##SUBSTOP##"::Int, var"##THREAD##"::Int)
+  end
   closureq = quote
     $closure = let
-      @inline ($args, var"##SUBSTART##"::Int, var"##SUBSTOP##"::Int, var"##THREAD##"::Int) -> begin
+      @inline $closure_args -> begin
         var"##LOOPSTART##" = var"##SUBSTART##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - var"##LOOP_STEP##"
         var"##LOOP_STOP##" = var"##SUBSTOP##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - var"##LOOP_STEP##"
         $threadlocal_get
@@ -321,6 +326,9 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
   for a ∈ arguments
     push!(args.args, get(defined,a,a))
     push!(batchcall.args, esc(a))
+  end
+  if threadlocal != :()
+    push!(batchcall.args, Expr(:kw, :threadlocal, true))
   end
   push!(q.args, batchcall)
   quote
