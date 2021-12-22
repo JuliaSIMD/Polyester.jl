@@ -122,6 +122,14 @@ function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, e
   return
 end
 
+function symbolsubs(e::Expr, old::Symbol, new::Symbol)
+  return Expr(e.head, (symbolsubs(a, old, new) for a in e.args)...)
+end
+function symbolsubs(e::Symbol, old::Symbol, new::Symbol)
+  e==old ? new : e
+end
+symbolsubs(e, old::Symbol, new::Symbol) = e
+
 struct NoLoop end
 Base.iterate(::NoLoop) = (NoLoop(), NoLoop())
 Base.iterate(::NoLoop, ::NoLoop) = nothing
@@ -289,8 +297,10 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
   end
   closure = Symbol("##closure##")
   threadlocal, threadlocal_type = threadlocal
-  threadlocal_init_single   = threadlocal == :() ? :() : :( $threadlocal_var = $threadlocal )
-  threadlocal_repack_single = threadlocal == :() ? :() : :( $threadlocal_var )
+  threadlocal_var_single = gensym(threadlocal_var)
+  q_single = symbolsubs(exorig, threadlocal_var, threadlocal_var_single)
+  threadlocal_init_single   = threadlocal == :() ? :() : :( $threadlocal_var_single = $threadlocal )
+  threadlocal_repack_single = threadlocal == :() ? :() : :( $threadlocal_var_single )
   threadlocal_init1         = threadlocal == :() ? :() : :( $threadlocal_var = Vector{$threadlocal_type}(undef, 0) )
   threadlocal_init2         = threadlocal == :() ? :() : :( resize!($(esc(threadlocal_var)),max(1,$(threadtup.args[2]))) )
   threadlocal_get           = threadlocal == :() ? :() : :( $threadlocal_var_gen = $threadlocal::$threadlocal_type )
@@ -330,7 +340,7 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
     if $num_threads() == 1
       single_thread_result = begin
         $(esc(threadlocal_init_single)) # Initialize threadlocal storage
-        $(esc(exorig))
+        $(esc(q_single))
         $(esc(threadlocal_repack_single))
       end
       $(esc(threadlocal_var)) = [single_thread_result] # Put the single-thread threadlocal storage in a single-element Vector
