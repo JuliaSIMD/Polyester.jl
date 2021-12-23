@@ -1,17 +1,22 @@
-struct BatchClosure{F, A, B}
+struct BatchClosure{F, A, B, C} # B is a Val{Bool} triggering free_local_threads!; C is a Val{Bool} triggering local storage
   f::F
 end
-function (b::BatchClosure{F,A,B})(p::Ptr{UInt}) where {F,A,B}
+function (b::BatchClosure{F,A,B,C})(p::Ptr{UInt}) where {F,A,B,C}
   (offset, args) = ThreadingUtilities.load(p, A, 2*sizeof(UInt))
   (offset, start) = ThreadingUtilities.load(p, UInt, offset)
   (offset, stop ) = ThreadingUtilities.load(p, UInt, offset)
-  b.f(args, (start+one(UInt))%Int, stop%Int)
+  if C
+    ((offset, i ) = ThreadingUtilities.load(p, UInt, offset))
+    b.f(args, (start+one(UInt))%Int, stop%Int, i%Int)
+  else
+    b.f(args, (start+one(UInt))%Int, stop%Int)
+  end
   # B && free_local_threads!()
   nothing
 end
 
-@inline function batch_closure(f::F, args::A, ::Val{B}) where {F,A,B}
-  bc = BatchClosure{F,A,B}(f)
+@inline function batch_closure(f::F, args::A, ::Val{B}, ::Val{C}) where {F,A,B, C}
+  bc = BatchClosure{F,A,B,C}(f)
   @cfunction($bc, Cvoid, (Ptr{UInt},))
 end
 
@@ -22,10 +27,24 @@ end
   offset = ThreadingUtilities.store!(p, stop, offset)
   nothing
 end
+@inline function setup_batch!(p::Ptr{UInt}, fptr::Ptr{Cvoid}, argtup, start::UInt, stop::UInt, i::UInt)
+  offset = ThreadingUtilities.store!(p, fptr, sizeof(UInt))
+  offset = ThreadingUtilities.store!(p, argtup, offset)
+  offset = ThreadingUtilities.store!(p, start, offset)
+  offset = ThreadingUtilities.store!(p, stop, offset)
+  offset = ThreadingUtilities.store!(p, i, offset)
+  nothing
+end
 @inline function launch_batched_thread!(cfunc, tid, argtup, start, stop)
   fptr = Base.unsafe_convert(Ptr{Cvoid}, cfunc)
   ThreadingUtilities.launch(tid, fptr, argtup, start, stop) do p, fptr, argtup, start, stop
     setup_batch!(p, fptr, argtup, start, stop)
+  end
+end
+@inline function launch_batched_thread!(cfunc, tid, argtup, start, stop, i)
+  fptr = Base.unsafe_convert(Ptr{Cvoid}, cfunc)
+  ThreadingUtilities.launch(tid, fptr, argtup, start, stop, i) do p, fptr, argtup, start, stop, i
+    setup_batch!(p, fptr, argtup, start, stop, i)
   end
 end
 _extract_params(::Type{T}) where {T<:Tuple} = T.parameters
@@ -50,7 +69,7 @@ function add_var!(q, argtup, gcpres, ::Type{T}, argtupname, gcpresname, k) where
   end
 end
 @generated function _batch_no_reserve(
-  f!::F, threadmask_tuple::NTuple{N}, nthread_tuple, torelease_tuple, Nr, Nd, ulen, args::Vararg{Any,K}
+  f!::F, threadmask_tuple::NTuple{N}, nthread_tuple, torelease_tuple, Nr, Nd, ulen, args::Vararg{Any,K}; threadlocal::Bool=false
 ) where {F,K,N}
   q = quote
     $(Expr(:meta,:inline))
@@ -73,12 +92,20 @@ end
         tz += 0x00000001
         tid += tz
         tm >>>= tz
-        launch_batched_thread!(cfunc, tid, argtup, start, stop)
+        if threadlocal
+          launch_batched_thread!(cfunc, tid, argtup, start, stop, i%UInt)
+        else
+          launch_batched_thread!(cfunc, tid, argtup, start, stop)
+        end  
         start = stop
       end
       Nr -= nthread
     end
-    f!(arguments, (start+one(UInt)) % Int, ulen % Int)
+    if threadlocal
+        f!(arguments, (start+one(UInt)) % Int, ulen % Int, (sum(nthread_tuple)+1)%Int)
+    else
+        f!(arguments, (start+one(UInt)) % Int, ulen % Int)
+    end
     for (threadmask, nthread, torelease) ∈ zip(threadmask_tuple, nthread_tuple, torelease_tuple)
       tm = mask(UnsignedIteratorEarlyStop(threadmask, nthread))
       tid = 0x00000000
@@ -100,7 +127,7 @@ end
   for k ∈ 1:K
     add_var!(q, argt, gcpr, args[k], :args, :gcp, k)
   end
-  push!(q.args, :(arguments = $argt), :(argtup = Reference(arguments)), :(cfunc = batch_closure(f!, argtup, Val{false}())), gcpr)
+  push!(q.args, :(arguments = $argt), :(argtup = Reference(arguments)), :(cfunc = batch_closure(f!, argtup, Val{false}(), Val{threadlocal}())), gcpr)
   push!(q.args, nothing)
   q
 end
@@ -200,7 +227,7 @@ end
 
 
 @inline function batch(
-  f!::F, (len, nbatches)::Tuple{Vararg{Integer,2}}, args::Vararg{Any,K}
+  f!::F, (len, nbatches)::Tuple{Vararg{Integer,2}}, args::Vararg{Any,K}; threadlocal::Bool=false
 ) where {F,K}
   # threads, torelease = request_threads(Base.Threads.threadid(), nbatches - one(nbatches))
   threads, torelease = request_threads(nbatches - one(nbatches))
@@ -208,19 +235,23 @@ end
   nthread = sum(nthreads)
   ulen = len % UInt
   if nthread % Int32 ≤ zero(Int32)
-    f!(args, one(Int), ulen % Int)
+    if threadlocal
+      f!(args, one(Int), ulen % Int, 1)
+    else
+      f!(args, one(Int), ulen % Int)
+    end
     return
   end
   nbatch = nthread + one(nthread)
   Nd = Base.udiv_int(ulen, nbatch % UInt) # reasonable for `ulen` to be ≥ 2^32
   Nr = ulen - Nd * nbatch
 
-  _batch_no_reserve(f!, map(mask,threads), nthreads, torelease, Nr, Nd, ulen, args...)
+  _batch_no_reserve(f!, map(mask,threads), nthreads, torelease, Nr, Nd, ulen, args...; threadlocal=threadlocal)
 end
 function batch(
-  f!::F, (len, nbatches, reserve_per_worker)::Tuple{Vararg{Integer,3}}, args::Vararg{Any,K}
+  f!::F, (len, nbatches, reserve_per_worker)::Tuple{Vararg{Integer,3}}, args::Vararg{Any,K}; threadlocal::Bool=false
 ) where {F,K}
-  batch(f!, (len, nbatches), args...)
+  batch(f!, (len, nbatches), args...; threadlocal=false)
   # ulen = len % UInt
   # if nbatches > 1
   #   requested_threads = reserve_per_worker*nbatches
