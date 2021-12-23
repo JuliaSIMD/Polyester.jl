@@ -1,5 +1,5 @@
 println("Starting tests with $(Threads.nthreads()) threads out of `Sys.CPU_THREADS = $(Sys.CPU_THREADS)`...")
-using Polyester, Aqua, ForwardDiff, BenchmarkTools
+using Polyester, Aqua, ForwardDiff
 using Test
 
 function bsin!(y,x,r=eachindex(y,x))
@@ -349,7 +349,7 @@ end
     end
     threadlocal
   end
-  @test length(inits)==1 || inits[1]!=inits[2]
+  @test length(inits)==1 || inits[1]!=inits[end] # this test has a race condition and can (rarely) fail
   # check that types are respected
   myinitD() = Float16(1.0)
   settingtype = let
@@ -367,16 +367,16 @@ end
   end
   @test eltype(settingabstype)<:AbstractFloat
   # check for excessive allocations
-  function f(n)
+  function f()
+      n=1000
       @batch minbatch=10 threadlocal=1.0::Float64 for i in 1:n
           threadlocal += 1.0/threadlocal
       end
       return threadlocal
   end
-  f(1000)
-  b = @benchmark $f(1000) samples=1 evals=1
-  @test b.allocs <= 10 + 2*Threads.nthreads()
-  @test b.memory <= 300 + 40*Threads.nthreads()
+  allocated(f::F) where {F} = @allocated f()
+  allocated(f)
+  @test allocated(f) < 300 + 40*Threads.nthreads()
 end
 
 if VERSION ≥ v"1.6"

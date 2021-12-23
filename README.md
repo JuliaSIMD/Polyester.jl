@@ -444,5 +444,5 @@ julia> let
            println(threadlocal)
        end
 
-Float16[83.0, 90.0, 27.0, 65.0
+Float16[83.0, 90.0, 27.0, 65.0]
 ```
