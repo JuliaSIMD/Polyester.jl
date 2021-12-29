@@ -137,7 +137,7 @@ end
     @test bsin!(y, x, 1:3:length(x)) == z
     @test sum(sin,x) ≈ sin_batch_sum(x)
     @test sum(sin,1:9) ≈ sin_batch_sum(1:9)
-  
+
     A = rand(200,300); x = Vector{Float64}(undef, 300);
     rowsum_batch!(x, A);
     @test x ≈ vec(sum(A,dims=1))
@@ -214,41 +214,7 @@ end
     issue20!(dest, cache)
     @test all(dest .≈ -1)
 end
-
-@testset "ForwardDiff" begin
-    x = randn(800);
-    dxref = similar(x);
-    dx = similar(x);
-    f(x) = -sum(sum ∘ sincos, x)
-    println("Running threaded ForwardDiff test...")
-    Polyester.threaded_gradient!(f, dx, x, ForwardDiff.Chunk(8));
-    ForwardDiff.gradient!(dxref, f, x, ForwardDiff.GradientConfig(f, x, ForwardDiff.Chunk(8), nothing));
-    @test dx == dxref
-
-    dx .= NaN;
-    batch((length(x), max(1,num_threads()>>1), 2), dx, x) do (dx,x), start, stop
-        Polyester.threaded_gradient!(f, view(dx, start%Int:stop%Int), view(x, start%Int:stop%Int), ForwardDiff.Chunk(8))
-    end;
-    @test dx ≈ dxref
-
-    dxref = similar(x, 100, 800);
-    dx = similar(dxref);
-    yref = similar(x, 100);
-    y = similar(x, 100);
-    A = randn(100, 800);
-    g!(y, x) = (y .= A*x)
-    g(x) = A*x
-
-    Polyester.threaded_jacobian!(g, dx, x, ForwardDiff.Chunk(8));
-    ForwardDiff.jacobian!(dxref, g, x, ForwardDiff.JacobianConfig(g, x, ForwardDiff.Chunk(8), nothing));
-    @test dx ≈ dxref
-
-    Polyester.threaded_jacobian!(g!, y, dx, x, ForwardDiff.Chunk(8));
-    ForwardDiff.jacobian!(dxref, g!, yref, x, ForwardDiff.JacobianConfig(g!, yref, x, ForwardDiff.Chunk(8), nothing));
-    @test dx ≈ dxref
-    @test y ≈ yref
-end
-
+                  
 @testset "Non-UnitRange loops" begin
   u = randn(10,100);
   x = view(u,1:5,:);
@@ -383,4 +349,3 @@ if VERSION ≥ v"1.6"
   println("Package tests complete. Running `Aqua` checks.")
   Aqua.test_all(Polyester)
 end
-
