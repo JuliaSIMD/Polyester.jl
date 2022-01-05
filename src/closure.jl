@@ -106,6 +106,7 @@ function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, e
       end
     end
   elseif head === :kw
+    args[2] = getgensym!(defined, args[2])
     return
   end
   for i ∈ startind:length(args)
@@ -387,6 +388,9 @@ benchmarking both.
 LoopVectorization.jl currently only uses up to 1 thread per physical core. Because there
 is some overhead to switching the number of threads used, `per=core` is `@batch`'s default,
 so that `Polyester.@batch` and `LoopVectorization.@tturbo` work well together by default.
+
+Threads are not pinned to a given CPU core and the total number of available threads is
+still governed by `--threads` or `JULIA_NUM_THREADS`.
 
 You can pass both `per=(core/thread)` and `minbatch=N` options at the same time, e.g.
 
