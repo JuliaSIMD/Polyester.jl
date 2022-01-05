@@ -389,6 +389,9 @@ LoopVectorization.jl currently only uses up to 1 thread per physical core. Becau
 is some overhead to switching the number of threads used, `per=core` is `@batch`'s default,
 so that `Polyester.@batch` and `LoopVectorization.@tturbo` work well together by default.
 
+Threads are not pinned to a given CPU core and the total number of available threads is
+still governed by `--threads` or `JULIA_NUM_THREADS`.
+
 You can pass both `per=(core/thread)` and `minbatch=N` options at the same time, e.g.
 
     @batch per=thread minbatch=2000 for i in Iter; ...; end

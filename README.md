@@ -9,6 +9,7 @@
 
 Polyester.jl provides low overhead threading.
 The primary API is `@batch`, which can be used in place of `Threads.@threads`.
+The number of available threads is still governed by [`--threads` or `JULIA_NUM_THREADS`](https://docs.julialang.org/en/v1.6/manual/multi-threading/#Starting-Julia-with-multiple-threads), as reported by `Threads.nthreads()`.
 Lets look at a simple benchmark.
 ```julia
 using Polyester, LinearAlgebra, BenchmarkHistograms
@@ -18,7 +19,7 @@ function axpy_serial!(y, a, x)
         y[i] = muladd(a, x[i], y[i])
     end
 end
-# One thread per core, the default
+# One thread per core, the default (the threads are not pinned)
 function axpy_per_core!(y, a, x)
     @batch per=core for i in eachindex(y,x)
         y[i] = muladd(a, x[i], y[i])
