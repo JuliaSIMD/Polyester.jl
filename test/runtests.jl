@@ -345,6 +345,16 @@ end
   @test allocated(f) < 300 + 40*Threads.nthreads()
 end
 
+@testset "gensym" begin
+  # issue 59 (lack of gensym for keyword arguments)
+  function f(; kw=10) kw end
+  buf = [0,0]
+  @batch for i in 1:2
+    buf[i] = f(; kw=i)
+  end
+  @test buf==[1,2]
+end
+
 if VERSION ≥ v"1.6"
   println("Package tests complete. Running `Aqua` checks.")
   Aqua.test_all(Polyester)
