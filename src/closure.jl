@@ -106,7 +106,11 @@ function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, e
       end
     end
   elseif head === :kw
-    args[2] = getgensym!(defined, args[2])
+    if args[2] isa Symbol
+      args[2] = get_sym!(defined, arguments, args[2], mod)
+    else
+      extractargs!(arguments, defined, args[2], mod)
+    end
     return
   end
   for i ∈ startind:length(args)
