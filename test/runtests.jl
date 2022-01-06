@@ -353,6 +353,14 @@ end
     buf[i] = f(; kw=i)
   end
   @test buf==[1,2]
+  # issue 61
+  function ff(buf,a)
+    @batch for i in 1:2
+        buf[i] = f(kw=i+a)
+    end
+  end
+  ff(buf,2)
+  @test buf==[3,4]
 end
 
 if VERSION ≥ v"1.6"
