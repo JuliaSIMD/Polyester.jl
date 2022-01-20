@@ -197,7 +197,7 @@ function maybestatic!(_expr)::Expr
   end
   esc(expr)
 end
-function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadlocal, mod)
+function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadlocal_tuple, mod)
   Meta.isexpr(exorig, :for, 2) || throw(ArgumentError("Expression invalid; should be a for loop."))
   ex = copy(exorig)
   loop_sym = Symbol("##LOOP##")
@@ -301,18 +301,20 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
     # end
   end
   closure = Symbol("##closure##")
-  threadlocal, threadlocal_type = threadlocal
+  threadlocal, threadlocal_type = threadlocal_tuple
   threadlocal_var_single = gensym(threadlocal_var)
   q_single = symbolsubs(exorig, threadlocal_var, threadlocal_var_single)
-  threadlocal_init_single   = threadlocal == :() ? :() : :( $threadlocal_var_single = $threadlocal )
-  threadlocal_repack_single = threadlocal == :() ? :() : :( $threadlocal_var_single )
-  threadlocal_init1         = threadlocal == :() ? :() : :( $threadlocal_var = Vector{$threadlocal_type}(undef, 0) )
-  threadlocal_init2         = threadlocal == :() ? :() : :( resize!($(esc(threadlocal_var)),max(1,$(threadtup.args[2]))) )
-  threadlocal_get           = threadlocal == :() ? :() : :( $threadlocal_var_gen = $threadlocal::$threadlocal_type )
-  threadlocal_set           = threadlocal == :() ? :() : :( $threadlocal_var[var"##THREAD##"] = $threadlocal_var_gen )
+  donothing = Expr(:block)
+  threadlocal_init_single   = threadlocal === Symbol("") ? donothing : :( $threadlocal_var_single = $threadlocal )
+  threadlocal_repack_single = threadlocal === Symbol("") ? donothing : :( $threadlocal_var_single )
+  threadlocal_single_store  = threadlocal === Symbol("") ? donothing : :( $(esc(threadlocal_var)) = [single_thread_result])
+  threadlocal_init1         = threadlocal === Symbol("") ? donothing : :( $threadlocal_var = Vector{$threadlocal_type}(undef, 0) )
+  threadlocal_init2         = threadlocal === Symbol("") ? donothing : :( resize!($(esc(threadlocal_var)),max(1,$(threadtup.args[2]))) )
+  threadlocal_get           = threadlocal === Symbol("") ? donothing : :( $threadlocal_var_gen = $threadlocal::$threadlocal_type )
+  threadlocal_set           = threadlocal === Symbol("") ? donothing : :( $threadlocal_var[var"##THREAD##"] = $threadlocal_var_gen )
   push!(q.args, threadlocal_init2)
   args = Expr(:tuple, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))
-  closure_args = if threadlocal == :()
+  closure_args = if threadlocal === Symbol("")
     :($args, var"##SUBSTART##"::Int, var"##SUBSTOP##"::Int)
   else
     :($args, var"##SUBSTART##"::Int, var"##SUBSTOP##"::Int, var"##THREAD##"::Int)
@@ -337,7 +339,7 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
     push!(args.args, get(defined,a,a))
     push!(batchcall.args, esc(a))
   end
-  if threadlocal != :()
+  if threadlocal !== Symbol("")
     push!(batchcall.args, Expr(:kw, :threadlocal, true))
   end
   push!(q.args, batchcall)
@@ -348,7 +350,8 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
         $(esc(q_single))
         $(esc(threadlocal_repack_single))
       end
-      $(esc(threadlocal_var)) = [single_thread_result] # Put the single-thread threadlocal storage in a single-element Vector
+      # Put the single-thread threadlocal storage in a single-element Vector
+      $threadlocal_single_store
     else
       $(esc(threadlocal_init1))
       let
@@ -402,9 +405,9 @@ You can pass both `per=(core/thread)` and `minbatch=N` options at the same time,
     @batch minbatch=5000 per=core   for i in Iter; ...; end
 """
 macro batch(ex)
-  enclose(macroexpand(__module__, ex), 0, 1, :core, (:(),:Any), __module__)
+  enclose(macroexpand(__module__, ex), 0, 1, :core, (Symbol(""),:Any), __module__)
 end
-function interpret_kwarg(arg, reserve_per = 0, minbatch = 1, per = :core, threadlocal = (:(),:Any))
+function interpret_kwarg(arg, reserve_per = 0, minbatch = 1, per = :core, threadlocal = (Symbol(""),:Any))
   a = arg.args[1]
   v = arg.args[2]
   if a === :reserve
@@ -416,8 +419,8 @@ function interpret_kwarg(arg, reserve_per = 0, minbatch = 1, per = :core, thread
     per = v::Symbol
     @assert (per === :core) | (per === :thread)
   elseif a === :threadlocal
-    if isa(v,Expr) && v.head==:(::)
-      threadlocal = v.args
+    if Meta.isexpr(v, :(::), 2) && v.head==:(::)
+      threadlocal = (v.args[1], v.args[2])
     else
       threadlocal = (v, :Any)
     end
