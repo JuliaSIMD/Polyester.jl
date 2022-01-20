@@ -340,7 +340,7 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
     push!(batchcall.args, esc(a))
   end
   if threadlocal !== Symbol("")
-    push!(batchcall.args, Expr(:kw, :threadlocal, true))
+    push!(batchcall.args, Expr(:kw, :threadlocal, Val(true)))
   end
   push!(q.args, batchcall)
   quote
