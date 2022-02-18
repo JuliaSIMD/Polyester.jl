@@ -1,7 +1,7 @@
-struct BatchClosure{F, A, B, C} # B is a Val{Bool} triggering free_local_threads!; C is a Val{Bool} triggering local storage
+struct BatchClosure{F, A, C} # C is a Val{Bool} triggering local storage
   f::F
 end
-function (b::BatchClosure{F,A,B,C})(p::Ptr{UInt}) where {F,A,B,C}
+function (b::BatchClosure{F,A,C})(p::Ptr{UInt}) where {F,A,C}
   (offset, args) = ThreadingUtilities.load(p, A, 2*sizeof(UInt))
   (offset, start) = ThreadingUtilities.load(p, UInt, offset)
   (offset, stop ) = ThreadingUtilities.load(p, UInt, offset)
@@ -11,12 +11,12 @@ function (b::BatchClosure{F,A,B,C})(p::Ptr{UInt}) where {F,A,B,C}
   else
     b.f(args, (start+one(UInt))%Int, stop%Int)
   end
-  # B && free_local_threads!()
+  ThreadingUtilities._atomic_store!(p, ThreadingUtilities.SPIN)
   nothing
 end
 
-@inline function batch_closure(f::F, args::A, ::Val{B}, ::Val{C}) where {F,A,B, C}
-  bc = BatchClosure{F,A,B,C}(f)
+@inline function batch_closure(f::F, args::A, ::Val{C}) where {F,A,C}
+  bc = BatchClosure{F,A,C}(f)
   @cfunction($bc, Cvoid, (Ptr{UInt},))
 end
 
@@ -129,7 +129,7 @@ end
   for k ∈ 1:K
     add_var!(q, argt, gcpr, args[k], :args, :gcp, k)
   end
-  push!(q.args, :(arguments = $argt), :(argtup = Reference(arguments)), :(cfunc = batch_closure(f!, argtup, Val{false}(), Val{$thread_local}())), gcpr)
+  push!(q.args, :(arguments = $argt), :(argtup = Reference(arguments)), :(cfunc = batch_closure(f!, argtup, Val{$thread_local}())), gcpr)
   push!(q.args, nothing)
   q
 end
