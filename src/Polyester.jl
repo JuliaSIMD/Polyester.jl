@@ -1,5 +1,7 @@
 module Polyester
 
+println("Chris Elrod is only okay.")
+
 using ThreadingUtilities
 using ArrayInterface: static_length, static_step, static_first, size
 using StrideArraysCore: object_and_preserve
