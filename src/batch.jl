@@ -247,7 +247,6 @@ end
   nbatch = nthread + one(nthread)
   Nd = Base.udiv_int(ulen, nbatch % UInt) # reasonable for `ulen` to be ≥ 2^32
   Nr = ulen - Nd * nbatch
-
   _batch_no_reserve(f!, map(mask,threads), nthreads, torelease, Nr, Nd, ulen, args...; threadlocal)
 end
 function batch(
