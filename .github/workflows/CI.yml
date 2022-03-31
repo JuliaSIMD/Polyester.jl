@@ -16,7 +16,7 @@ jobs:
         os:
           - ubuntu-latest
         threads:
-          - '5'
+          - '3'
         arch:
           - x86
           - x64
