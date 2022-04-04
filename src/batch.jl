@@ -1,15 +1,15 @@
-struct BatchClosure{F, A, C} # C is a Val{Bool} triggering local storage
+struct BatchClosure{F,A,C} # C is a Val{Bool} triggering local storage
   f::F
 end
 function (b::BatchClosure{F,A,C})(p::Ptr{UInt}) where {F,A,C}
-  (offset, args) = ThreadingUtilities.load(p, A, 2*sizeof(UInt))
+  (offset, args) = ThreadingUtilities.load(p, A, 2 * sizeof(UInt))
   (offset, start) = ThreadingUtilities.load(p, UInt, offset)
-  (offset, stop ) = ThreadingUtilities.load(p, UInt, offset)
+  (offset, stop) = ThreadingUtilities.load(p, UInt, offset)
   if C
-    ((offset, i ) = ThreadingUtilities.load(p, UInt, offset))
-    b.f(args, (start+one(UInt))%Int, stop%Int, i%Int)
+    ((offset, i) = ThreadingUtilities.load(p, UInt, offset))
+    b.f(args, (start + one(UInt)) % Int, stop % Int, i % Int)
   else
-    b.f(args, (start+one(UInt))%Int, stop%Int)
+    b.f(args, (start + one(UInt)) % Int, stop % Int)
   end
   ThreadingUtilities._atomic_store!(p, ThreadingUtilities.SPIN)
   nothing
@@ -20,14 +20,27 @@ end
   @cfunction($bc, Cvoid, (Ptr{UInt},))
 end
 
-@inline function setup_batch!(p::Ptr{UInt}, fptr::Ptr{Cvoid}, argtup, start::UInt, stop::UInt)
+@inline function setup_batch!(
+  p::Ptr{UInt},
+  fptr::Ptr{Cvoid},
+  argtup,
+  start::UInt,
+  stop::UInt,
+)
   offset = ThreadingUtilities.store!(p, fptr, sizeof(UInt))
   offset = ThreadingUtilities.store!(p, argtup, offset)
   offset = ThreadingUtilities.store!(p, start, offset)
   offset = ThreadingUtilities.store!(p, stop, offset)
   nothing
 end
-@inline function setup_batch!(p::Ptr{UInt}, fptr::Ptr{Cvoid}, argtup, start::UInt, stop::UInt, i::UInt)
+@inline function setup_batch!(
+  p::Ptr{UInt},
+  fptr::Ptr{Cvoid},
+  argtup,
+  start::UInt,
+  stop::UInt,
+  i::UInt,
+)
   offset = ThreadingUtilities.store!(p, fptr, sizeof(UInt))
   offset = ThreadingUtilities.store!(p, argtup, offset)
   offset = ThreadingUtilities.store!(p, start, offset)
@@ -43,14 +56,22 @@ end
 end
 @inline function launch_batched_thread!(cfunc, tid, argtup, start, stop, i)
   fptr = Base.unsafe_convert(Ptr{Cvoid}, cfunc)
-  ThreadingUtilities.launch(tid, fptr, argtup, start, stop, i) do p, fptr, argtup, start, stop, i
+  ThreadingUtilities.launch(
+    tid,
+    fptr,
+    argtup,
+    start,
+    stop,
+    i,
+  ) do p, fptr, argtup, start, stop, i
     setup_batch!(p, fptr, argtup, start, stop, i)
   end
 end
 _extract_params(::Type{T}) where {T<:Tuple} = T.parameters
 _extract_params(::Type{NamedTuple{S,T}}) where {S,T<:Tuple} = T.parameters
-push_tup!(x, ::Type{T}, t) where {T<:Tuple} = push!(x,t)
-push_tup!(x, ::Type{NamedTuple{S,T}}, t) where {S,T<:Tuple} = push!(x, Expr(:call, Expr(:curly, :NamedTuple, S), t))
+push_tup!(x, ::Type{T}, t) where {T<:Tuple} = push!(x, t)
+push_tup!(x, ::Type{NamedTuple{S,T}}, t) where {S,T<:Tuple} =
+  push!(x, Expr(:call, Expr(:curly, :NamedTuple, S), t))
 
 function add_var!(q, argtup, gcpres, ::Type{T}, argtupname, gcpresname, k) where {T}
   parg_k = Symbol(argtupname, :_, k)
@@ -58,35 +79,50 @@ function add_var!(q, argtup, gcpres, ::Type{T}, argtupname, gcpresname, k) where
   if (T <: Tuple) # || (T <: NamedTuple) # NamedTuples do currently not work in all cases, see https://github.com/JuliaSIMD/Polyester.jl/issues/20
     push!(q.args, Expr(:(=), parg_k, Expr(:ref, argtupname, k)))
     t = Expr(:tuple)
-    for (j,p) ∈ enumerate(_extract_params(T))
+    for (j, p) ∈ enumerate(_extract_params(T))
       add_var!(q, t, gcpres, p, parg_k, garg_k, j)
     end
     push_tup!(argtup.args, T, t)
   else
-    push!(q.args, Expr(:(=), Expr(:tuple, parg_k, garg_k), Expr(:call, :object_and_preserve, Expr(:ref, argtupname, k))))
+    push!(
+      q.args,
+      Expr(
+        :(=),
+        Expr(:tuple, parg_k, garg_k),
+        Expr(:call, :object_and_preserve, Expr(:ref, argtupname, k)),
+      ),
+    )
     push!(argtup.args, parg_k)
     push!(gcpres.args, garg_k)
   end
 end
 @generated function _batch_no_reserve(
-  f!::F, threadmask_tuple::NTuple{N}, nthread_tuple, torelease_tuple, Nr, Nd, ulen, args::Vararg{Any,K}; threadlocal::Val{thread_local}=Val(false)
+  f!::F,
+  threadmask_tuple::NTuple{N},
+  nthread_tuple,
+  torelease_tuple,
+  Nr,
+  Nd,
+  ulen,
+  args::Vararg{Any,K};
+  threadlocal::Val{thread_local} = Val(false),
 ) where {F,K,N,thread_local}
   q = quote
-    $(Expr(:meta,:inline))
+    $(Expr(:meta, :inline))
     # threads = UnsignedIteratorEarlyStop(threadmask, nthread)
     # threads_tuple = map(UnsignedIteratorEarlyStop, threadmask_tuple, nthread_tuple)
     # nthread_total = sum(nthread_tuple)
     Ndp = Nd + one(Nd)
   end
   launch_quote = if thread_local
-    :(launch_batched_thread!(cfunc, tid, argtup, start, stop, i%UInt))
+    :(launch_batched_thread!(cfunc, tid, argtup, start, stop, i % UInt))
   else
     :(launch_batched_thread!(cfunc, tid, argtup, start, stop))
   end
   rem_quote = if thread_local
-    :(f!(arguments, (start+one(UInt)) % Int, ulen % Int, (sum(nthread_tuple)+1)%Int))
+    :(f!(arguments, (start + one(UInt)) % Int, ulen % Int, (sum(nthread_tuple) + 1) % Int))
   else
-    :(f!(arguments, (start+one(UInt)) % Int, ulen % Int))
+    :(f!(arguments, (start + one(UInt)) % Int, ulen % Int))
   end
   block = quote
     start = zero(UInt)
@@ -108,7 +144,8 @@ end
       Nr -= nthread
     end
     $rem_quote
-    for (threadmask, nthread, torelease) ∈ zip(threadmask_tuple, nthread_tuple, torelease_tuple)
+    for (threadmask, nthread, torelease) ∈
+        zip(threadmask_tuple, nthread_tuple, torelease_tuple)
       tm = mask(UnsignedIteratorEarlyStop(threadmask, nthread))
       tid = 0x00000000
       while tm ≠ zero(tm)
@@ -129,7 +166,13 @@ end
   for k ∈ 1:K
     add_var!(q, argt, gcpr, args[k], :args, :gcp, k)
   end
-  push!(q.args, :(arguments = $argt), :(argtup = Reference(arguments)), :(cfunc = batch_closure(f!, argtup, Val{$thread_local}())), gcpr)
+  push!(
+    q.args,
+    :(arguments = $argt),
+    :(argtup = Reference(arguments)),
+    :(cfunc = batch_closure(f!, argtup, Val{$thread_local}())),
+    gcpr,
+  )
   push!(q.args, nothing)
   q
 end
@@ -153,7 +196,7 @@ end
 #     quote
 #       nthreads == zero(nthreads) && continue
 #       nthread = max(1, (nthread_total * nthreads) ÷ nthread_denom)
-      
+
 #     end
 #   end
 #   break_cond = N == 1 ? :(i == nthread) : :((i == nthread) | (j == nthread_total))
@@ -229,11 +272,14 @@ end
 
 
 @inline function batch(
-  f!::F, (len, nbatches)::Tuple{Vararg{Integer,2}}, args::Vararg{Any,K}; threadlocal::Val{thread_local}=Val{false}()
+  f!::F,
+  (len, nbatches)::Tuple{Vararg{Integer,2}},
+  args::Vararg{Any,K};
+  threadlocal::Val{thread_local} = Val{false}(),
 ) where {F,K,thread_local}
   # threads, torelease = request_threads(Base.Threads.threadid(), nbatches - one(nbatches))
   threads, torelease = request_threads(nbatches - one(nbatches))
-  nthreads = map(length,threads)
+  nthreads = map(length, threads)
   nthread = sum(nthreads)
   ulen = len % UInt
   if nthread % Int32 ≤ zero(Int32)
@@ -247,10 +293,23 @@ end
   nbatch = nthread + one(nthread)
   Nd = Base.udiv_int(ulen, nbatch % UInt) # reasonable for `ulen` to be ≥ 2^32
   Nr = ulen - Nd * nbatch
-  _batch_no_reserve(f!, map(mask,threads), nthreads, torelease, Nr, Nd, ulen, args...; threadlocal)
+  _batch_no_reserve(
+    f!,
+    map(mask, threads),
+    nthreads,
+    torelease,
+    Nr,
+    Nd,
+    ulen,
+    args...;
+    threadlocal,
+  )
 end
 function batch(
-  f!::F, (len, nbatches, reserve_per_worker)::Tuple{Vararg{Integer,3}}, args::Vararg{Any,K}; threadlocal::Val{thread_local}=Val(false)
+  f!::F,
+  (len, nbatches, reserve_per_worker)::Tuple{Vararg{Integer,3}},
+  args::Vararg{Any,K};
+  threadlocal::Val{thread_local} = Val(false),
 ) where {F,K,thread_local}
   batch(f!, (len, nbatches), args...; threadlocal)
   # ulen = len % UInt
@@ -271,7 +330,7 @@ function batch(
   #     if iszero(unused_threads)
   #       _batch_no_reserve(f!, threadmasks, nthreads, torelease, Nr, Nd, ulen, args...)
   #     else
-        
+
   #       _batch_reserve(f!, threadmasks, nthreads, torelease, nbatch, unused_threads, Nr, Nd, ulen, args...)
   #     end
   #     return nothing

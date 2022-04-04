@@ -6,7 +6,8 @@ using StrideArraysCore: object_and_preserve
 using ManualMemory: Reference
 using Static
 using Requires
-using PolyesterWeave: request_threads, free_threads!, mask, UnsignedIteratorEarlyStop, assume
+using PolyesterWeave:
+  request_threads, free_threads!, mask, UnsignedIteratorEarlyStop, assume
 using CPUSummary: num_threads, num_cores
 
 export batch, @batch, num_threads

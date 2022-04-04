@@ -28,7 +28,12 @@ function define_tup!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, ex
     end
   end
 end
-function define1!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, x::Vector{Any}, mod)
+function define1!(
+  arguments::Vector{Symbol},
+  defined::Dict{Symbol,Symbol},
+  x::Vector{Any},
+  mod,
+)
   s = x[1]
   if s isa Symbol
     x[1] = getgensym!(defined, s)
@@ -36,7 +41,12 @@ function define1!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, x::Ve
     define_tup!(arguments, defined, s::Expr, mod)
   end
 end
-function define_induction_variables!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, ex::Expr, mod) # add `i` in `for i ∈ looprange` to `defined`
+function define_induction_variables!(
+  arguments::Vector{Symbol},
+  defined::Dict{Symbol,Symbol},
+  ex::Expr,
+  mod,
+) # add `i` in `for i ∈ looprange` to `defined`
   ex.head === :for || return
   loops = ex.args[1]
   if loops.head === :block
@@ -48,7 +58,12 @@ function define_induction_variables!(arguments::Vector{Symbol}, defined::Dict{Sy
   end
 end
 
-function extractargs_equal!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, args::Vector{Any}, mod)
+function extractargs_equal!(
+  arguments::Vector{Symbol},
+  defined::Dict{Symbol,Symbol},
+  args::Vector{Any},
+  mod,
+)
   arg1 = first(args)
   if arg1 isa Symbol
     args[1] = getgensym!(defined, arg1)
@@ -58,7 +73,10 @@ function extractargs_equal!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symb
   nothing
 end
 function must_add_sym(defined::Dict{Symbol,Symbol}, arg::Symbol, mod)
-  ((arg ∉ keys(defined)) && arg ∉ (:nothing, :(+), :(*), :(-), :(/), :(÷), :(<<), :(>>), :(>>>), :zero, :one)) && !Base.isdefined(mod, arg)
+  (
+    (arg ∉ keys(defined)) &&
+    arg ∉ (:nothing, :(+), :(*), :(-), :(/), :(÷), :(<<), :(>>), :(>>>), :zero, :one)
+  ) && !Base.isdefined(mod, arg)
 end
 function get_sym!(defined::Dict{Symbol,Symbol}, arguments::Vector{Symbol}, arg::Symbol, mod)
   if must_add_sym(defined, arg, mod)
@@ -70,7 +88,12 @@ function get_sym!(defined::Dict{Symbol,Symbol}, arguments::Vector{Symbol}, arg::
     get(defined, arg, arg)
   end
 end
-function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, expr::Expr, mod)
+function extractargs!(
+  arguments::Vector{Symbol},
+  defined::Dict{Symbol,Symbol},
+  expr::Expr,
+  mod,
+)
   define_induction_variables!(arguments, defined, expr, mod)
   head = expr.head
   args = expr.args
@@ -95,7 +118,7 @@ function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, e
     extractargs!(arguments, td, args[2], mod)
     return
   elseif (head === :local) || (head === :global)
-    for (i,arg) in enumerate(args)
+    for (i, arg) in enumerate(args)
       if Meta.isexpr(arg, :(=))
         extractargs_equal!(arguments, defined, arg.args, mod)
         args = arg.args
@@ -131,7 +154,7 @@ function symbolsubs(e::Expr, old::Symbol, new::Symbol)
   return Expr(e.head, (symbolsubs(a, old, new) for a in e.args)...)
 end
 function symbolsubs(e::Symbol, old::Symbol, new::Symbol)
-  e==old ? new : e
+  e == old ? new : e
 end
 symbolsubs(e, old::Symbol, new::Symbol) = e
 
@@ -155,7 +178,9 @@ struct TupleIndices end
   iters = x.iterators
   iters[1], iters[2], TupleIndices()
 end
-@inline function splitloop(x::Base.Iterators.ProductIterator{<:Tuple{Vararg{Any,N}}}) where {N}
+@inline function splitloop(
+  x::Base.Iterators.ProductIterator{<:Tuple{Vararg{Any,N}}},
+) where {N}
   iters = x.iterators
   Base.front(iters), iters[N], TupleIndices()
 end
@@ -164,12 +189,13 @@ combine(::CombineIndices, I::CartesianIndex, j) = CartesianIndex((I.I..., j))
 combine(::TupleIndices, i::Tuple, j) = (i..., j)
 combine(::TupleIndices, i::Number, j) = (i, j)
 
-Base.@propagate_inbounds combine(x::AbstractArray, I, j) = x[combine(CombineIndices(), I, j)]
+Base.@propagate_inbounds combine(x::AbstractArray, I, j) =
+  x[combine(CombineIndices(), I, j)]
 Base.@propagate_inbounds combine(x::AbstractArray, ::NoLoop, j) = x[j]
 
 static_literals!(s::Symbol) = s
 function static_literals!(q::Expr)
-  for (i,ex) ∈ enumerate(q.args)
+  for (i, ex) ∈ enumerate(q.args)
     if ex isa Integer
       q.args[i] = StaticInt(ex)
     elseif ex isa Expr
@@ -197,8 +223,16 @@ function maybestatic!(_expr)::Expr
   end
   esc(expr)
 end
-function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadlocal_tuple, mod)
-  Meta.isexpr(exorig, :for, 2) || throw(ArgumentError("Expression invalid; should be a for loop."))
+function enclose(
+  exorig::Expr,
+  reserve_per,
+  minbatchsize,
+  per::Symbol,
+  threadlocal_tuple,
+  mod,
+)
+  Meta.isexpr(exorig, :for, 2) ||
+    throw(ArgumentError("Expression invalid; should be a for loop."))
   ex = copy(exorig)
   loop_sym = Symbol("##LOOP##")
   loopstart = Symbol("##LOOPSTART##")
@@ -229,7 +263,8 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
   if length(secondaryloopsargs) == 1
     body = Expr(:for, only(secondaryloopsargs), body)
   elseif length(secondaryloopsargs) > 1
-    sl = Expr(:block); append!(sl.args, secondaryloopsargs)
+    sl = Expr(:block)
+    append!(sl.args, secondaryloopsargs)
     body = Expr(:for, sl, body)
   end
   fla1 = firstloop.args[1]
@@ -288,14 +323,17 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
   end
   if minbatchsize isa Integer && minbatchsize ≤ 1
     # if reserve_per ≤ 0
-      push!(threadtup.args, :(min($iter_leng, $num_thread_expr)))
+    push!(threadtup.args, :(min($iter_leng, $num_thread_expr)))
     # else
     #   push!(threadtup.args, :(min($iter_leng, cld($num_thread_expr, $reserve_per))), reserve_per)
     # end
   else
-    il = :(div($iter_leng, $(minbatchsize isa Int ? StaticInt(minbatchsize) : esc(minbatchsize))))
+    il = :(div(
+      $iter_leng,
+      $(minbatchsize isa Int ? StaticInt(minbatchsize) : esc(minbatchsize)),
+    ))
     # if reserve_per ≤ 0
-      push!(threadtup.args, :(min($il, $num_thread_expr)))
+    push!(threadtup.args, :(min($il, $num_thread_expr)))
     # else
     #   push!(threadtup.args, :(min($il, cld($num_thread_expr, $reserve_per))), reserve_per)
     # end
@@ -305,13 +343,25 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
   threadlocal_var_single = gensym(threadlocal_var)
   q_single = symbolsubs(exorig, threadlocal_var, threadlocal_var_single)
   donothing = Expr(:block)
-  threadlocal_init_single   = threadlocal === Symbol("") ? donothing : :( $threadlocal_var_single = $threadlocal )
-  threadlocal_repack_single = threadlocal === Symbol("") ? donothing : :( $threadlocal_var_single )
-  threadlocal_single_store  = threadlocal === Symbol("") ? donothing : :( $(esc(threadlocal_var)) = [single_thread_result])
-  threadlocal_init1         = threadlocal === Symbol("") ? donothing : :( $threadlocal_var = Vector{$threadlocal_type}(undef, 0) )
-  threadlocal_init2         = threadlocal === Symbol("") ? donothing : :( resize!($(esc(threadlocal_var)),max(1,$(threadtup.args[2]))) )
-  threadlocal_get           = threadlocal === Symbol("") ? donothing : :( $threadlocal_var_gen = $threadlocal::$threadlocal_type )
-  threadlocal_set           = threadlocal === Symbol("") ? donothing : :( $threadlocal_var[var"##THREAD##"] = $threadlocal_var_gen )
+  threadlocal_init_single =
+    threadlocal === Symbol("") ? donothing : :($threadlocal_var_single = $threadlocal)
+  threadlocal_repack_single =
+    threadlocal === Symbol("") ? donothing : :($threadlocal_var_single)
+  threadlocal_single_store =
+    threadlocal === Symbol("") ? donothing :
+    :($(esc(threadlocal_var)) = [single_thread_result])
+  threadlocal_init1 =
+    threadlocal === Symbol("") ? donothing :
+    :($threadlocal_var = Vector{$threadlocal_type}(undef, 0))
+  threadlocal_init2 =
+    threadlocal === Symbol("") ? donothing :
+    :(resize!($(esc(threadlocal_var)), max(1, $(threadtup.args[2]))))
+  threadlocal_get =
+    threadlocal === Symbol("") ? donothing :
+    :($threadlocal_var_gen = $threadlocal::$threadlocal_type)
+  threadlocal_set =
+    threadlocal === Symbol("") ? donothing :
+    :($threadlocal_var[var"##THREAD##"] = $threadlocal_var_gen)
   push!(q.args, threadlocal_init2)
   args = Expr(:tuple, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))
   closure_args = if threadlocal === Symbol("")
@@ -322,8 +372,10 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
   closureq = quote
     $closure = let
       @inline $closure_args -> begin
-        var"##LOOPSTART##" = var"##SUBSTART##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - var"##LOOP_STEP##"
-        var"##LOOP_STOP##" = var"##SUBSTOP##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - var"##LOOP_STEP##"
+        var"##LOOPSTART##" =
+          var"##SUBSTART##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - var"##LOOP_STEP##"
+        var"##LOOP_STOP##" =
+          var"##SUBSTOP##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - var"##LOOP_STEP##"
         $threadlocal_get
         @inbounds begin
           $excomb
@@ -334,9 +386,16 @@ function enclose(exorig::Expr, reserve_per, minbatchsize, per::Symbol, threadloc
     end
   end
   push!(q.args, esc(closureq))
-  batchcall = Expr(:call, batch, esc(closure), threadtup, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))
+  batchcall = Expr(
+    :call,
+    batch,
+    esc(closure),
+    threadtup,
+    Symbol("##LOOPOFFSET##"),
+    Symbol("##LOOP_STEP##"),
+  )
   for a ∈ arguments
-    push!(args.args, get(defined,a,a))
+    push!(args.args, get(defined, a, a))
     push!(batchcall.args, esc(a))
   end
   if threadlocal !== Symbol("")
@@ -405,9 +464,15 @@ You can pass both `per=(core/thread)` and `minbatch=N` options at the same time,
     @batch minbatch=5000 per=core   for i in Iter; ...; end
 """
 macro batch(ex)
-  enclose(macroexpand(__module__, ex), 0, 1, :core, (Symbol(""),:Any), __module__)
+  enclose(macroexpand(__module__, ex), 0, 1, :core, (Symbol(""), :Any), __module__)
 end
-function interpret_kwarg(arg, reserve_per = 0, minbatch = 1, per = :core, threadlocal = (Symbol(""),:Any))
+function interpret_kwarg(
+  arg,
+  reserve_per = 0,
+  minbatch = 1,
+  per = :core,
+  threadlocal = (Symbol(""), :Any),
+)
   a = arg.args[1]
   v = arg.args[2]
   if a === :reserve
@@ -419,7 +484,7 @@ function interpret_kwarg(arg, reserve_per = 0, minbatch = 1, per = :core, thread
     per = v::Symbol
     @assert (per === :core) | (per === :thread)
   elseif a === :threadlocal
-    if Meta.isexpr(v, :(::), 2) && v.head==:(::)
+    if Meta.isexpr(v, :(::), 2) && v.head == :(::)
       threadlocal = (v.args[1], v.args[2])
     else
       threadlocal = (v, :Any)
@@ -435,12 +500,15 @@ macro batch(arg1, ex)
 end
 macro batch(arg1, arg2, ex)
   reserve, minbatch, per, threadlocal = interpret_kwarg(arg1)
-  reserve, minbatch, per, threadlocal = interpret_kwarg(arg2, reserve, minbatch, per, threadlocal)
+  reserve, minbatch, per, threadlocal =
+    interpret_kwarg(arg2, reserve, minbatch, per, threadlocal)
   enclose(macroexpand(__module__, ex), reserve, minbatch, per, threadlocal, __module__)
 end
 macro batch(arg1, arg2, arg3, ex)
   reserve, minbatch, per, threadlocal = interpret_kwarg(arg1)
-  reserve, minbatch, per, threadlocal = interpret_kwarg(arg2, reserve, minbatch, per, threadlocal)
-  reserve, minbatch, per, threadlocal = interpret_kwarg(arg3, reserve, minbatch, per, threadlocal)
+  reserve, minbatch, per, threadlocal =
+    interpret_kwarg(arg2, reserve, minbatch, per, threadlocal)
+  reserve, minbatch, per, threadlocal =
+    interpret_kwarg(arg3, reserve, minbatch, per, threadlocal)
   enclose(macroexpand(__module__, ex), reserve, minbatch, per, threadlocal, __module__)
 end
