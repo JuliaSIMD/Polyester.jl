@@ -15,10 +15,22 @@ function (b::BatchClosure{F,A,C})(p::Ptr{UInt}) where {F,A,C}
   nothing
 end
 
-@inline function batch_closure(f::F, args::A, ::Val{C}) where {F,A,C}
-  bc = BatchClosure{F,A,C}(f)
-  @cfunction($bc, Cvoid, (Ptr{UInt},))
+@generated function batch_closure(f::F, args::A, ::Val{C}) where {F,A,C}
+  q = if Base.issingletontype(F)
+    bc = BatchClosure{F,A,C}(F.instance)
+    :(@cfunction($bc, Cvoid, (Ptr{UInt},)))
+  else
+    quote
+      bc = BatchClosure{F,A,C}(f)
+      @cfunction($(Expr(:$, :bc)), Cvoid, (Ptr{UInt},))
+    end
+  end
+  return Expr(:block, Expr(:meta,:inline), q)
 end
+# @inline function batch_closure(f::F, args::A, ::Val{C}) where {F,A,C}
+#   bc = BatchClosure{F,A,C}(f)
+#   @cfunction($bc, Cvoid, (Ptr{UInt},))
+# end
 
 @inline function setup_batch!(
   p::Ptr{UInt},
