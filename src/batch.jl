@@ -290,6 +290,7 @@ end
   threadlocal::Val{thread_local} = Val{false}(),
 ) where {F,K,thread_local}
   # threads, torelease = request_threads(Base.Threads.threadid(), nbatches - one(nbatches))
+  len > 0 || return
   threads, torelease = request_threads(nbatches - one(nbatches))
   nthreads = map(length, threads)
   nthread = sum(nthreads)
