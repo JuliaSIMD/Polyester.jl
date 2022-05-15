@@ -291,11 +291,13 @@ end
 ) where {F,K,thread_local}
   # threads, torelease = request_threads(Base.Threads.threadid(), nbatches - one(nbatches))
   len > 0 || return
+  ulen = len % UInt
+  nbatches == 0 && @goto SERIAL
   threads, torelease = request_threads(nbatches - one(nbatches))
   nthreads = map(length, threads)
   nthread = sum(nthreads)
-  ulen = len % UInt
   if nthread % Int32 ≤ zero(Int32)
+    @label SERIAL
     if thread_local
       f!(args, one(Int), ulen % Int, 1)
     else
