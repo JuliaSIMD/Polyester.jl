@@ -8,7 +8,7 @@ end
 
 extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, sym, mod) = nothing
 # function extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, sym::Symbol, mod)
-#   if ((sym ∉ keys(defined)) && sym ∉ (:nothing, :(+), :(*), :(-), :(/), :(÷), :(<<), :(>>), :(>>>), :zero, :one)) && !Base.isdefined(mod, sym)
+#   if ((sym ∉ keys(defined)) && sym ∉ (:nothing, :(+), :(*), :(-), :(/), :(÷), :(<<), :(>>), :(>>>), :zero, :one)) && !Base.isconst(mod, sym)
 #     @show getgensym!(defined, sym)
 #     @assert false
 #     push!(arguments, getgensym!(defined, sym))
@@ -72,11 +72,12 @@ function extractargs_equal!(
   end
   nothing
 end
+
 function must_add_sym(defined::Dict{Symbol,Symbol}, arg::Symbol, mod)
   (
     (arg ∉ keys(defined)) &&
     arg ∉ (:nothing, :(+), :(*), :(-), :(/), :(÷), :(<<), :(>>), :(>>>), :zero, :one)
-  ) && !Base.isdefined(mod, arg)
+  ) && !Base.isconst(mod, arg)
 end
 function get_sym!(defined::Dict{Symbol,Symbol}, arguments::Vector{Symbol}, arg::Symbol, mod)
   if must_add_sym(defined, arg, mod)
