@@ -1,7 +1,7 @@
 name = "Polyester"
 uuid = "f517fe37-dbe3-4b94-8317-1923a5111588"
 authors = ["Chris Elrod <elrodc@gmail.com> and contributors"]
-version = "0.6.9"
+version = "0.6.10"
 
 [deps]
 ArrayInterface = "4fba245c-0d91-5ea0-9b3e-6abc04ee57a9"
@@ -16,7 +16,7 @@ StrideArraysCore = "7792a7ef-975c-4747-a70f-980b88e8d1da"
 ThreadingUtilities = "8290d209-cae3-49c0-8002-c8c24d57dab5"
 
 [compat]
-ArrayInterface = "3.1.32, 4, 5"
+ArrayInterface = "3.1.32, 4, 5, 6"
 BitTwiddlingConvenienceFunctions = "0.1"
 CPUSummary = "0.1.2 - 0.1.8, 0.1.11"
 IfElse = "0.1"
