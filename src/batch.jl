@@ -110,14 +110,14 @@ function add_var!(q, argtup, gcpres, ::Type{T}, argtupname, gcpresname, k) where
 end
 @generated function _batch_no_reserve(
   f!::F,
+  threadlocal::Val{thread_local},
   threadmask_tuple::NTuple{N},
   nthread_tuple,
   torelease_tuple,
   Nr,
   Nd,
   ulen,
-  args::Vararg{Any,K};
-  threadlocal::Val{thread_local} = Val(false),
+  args::Vararg{Any,K},
 ) where {F,K,N,thread_local}
   q = quote
     $(Expr(:meta, :inline))
@@ -282,12 +282,19 @@ end
 #   q
 # end
 
-
 @inline function batch(
   f!::F,
   (len, nbatches)::Tuple{Vararg{Integer,2}},
-  args::Vararg{Any,K};
-  threadlocal::Val{thread_local} = Val{false}(),
+  args::Vararg{Any,K}) where {F,K}
+
+  batch(f!, Val{false}(), (len, nbatches), args...)
+end
+
+@inline function batch(
+  f!::F,
+  threadlocal::Val{thread_local},
+  (len, nbatches)::Tuple{Vararg{Integer,2}},
+  args::Vararg{Any,K}
 ) where {F,K,thread_local}
   # threads, torelease = request_threads(Base.Threads.threadid(), nbatches - one(nbatches))
   len > 0 || return
@@ -310,14 +317,14 @@ end
   Nr = ulen - Nd * nbatch
   _batch_no_reserve(
     f!,
+    threadlocal,
     map(mask, threads),
     nthreads,
     torelease,
     Nr,
     Nd,
     ulen,
-    args...;
-    threadlocal,
+    args...
   )
 end
 function batch(

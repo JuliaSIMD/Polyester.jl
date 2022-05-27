@@ -387,20 +387,30 @@ function enclose(
     end
   end
   push!(q.args, esc(closureq))
-  batchcall = Expr(
-    :call,
-    batch,
-    esc(closure),
-    threadtup,
-    Symbol("##LOOPOFFSET##"),
-    Symbol("##LOOP_STEP##"),
-  )
+  batchcall = if threadlocal !== Symbol("")
+    Expr(
+      :call,
+      batch,
+      esc(closure),
+      Val(true),
+      threadtup,
+      Symbol("##LOOPOFFSET##"),
+      Symbol("##LOOP_STEP##"),
+    )
+  else
+    Expr(
+      :call,
+      batch,
+      esc(closure),
+      Val(false),
+      threadtup,
+      Symbol("##LOOPOFFSET##"),
+      Symbol("##LOOP_STEP##"),
+    )
+  end
   for a ∈ arguments
     push!(args.args, get(defined, a, a))
     push!(batchcall.args, esc(a))
-  end
-  if threadlocal !== Symbol("")
-    push!(batchcall.args, Expr(:kw, :threadlocal, Val(true)))
   end
   push!(q.args, batchcall)
   quote
