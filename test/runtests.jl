@@ -377,6 +377,23 @@ end
   @test buf == [3, 4]
 end
 
+@testset "gensym keywords with implicit name" begin
+  # issue 78 (lack of support for keyword arguments using only variable names without `=`)
+
+  f(a; b=10.0, c=100.0) = a + b + c
+  
+  buf = [0, 0]
+  b = 0.0
+  
+  Threads.nthreads() == 1 && println("the issue arises only on multithreading runs")
+
+  @batch for i in 1:2
+      buf[i] = f(i; b, c=0.0)
+  end
+
+  @test buf == [1, 2]
+end
+
 if VERSION ≥ v"1.6"
   println("Package tests complete. Running `Aqua` checks.")
   Aqua.test_all(Polyester)
