@@ -98,6 +98,7 @@ function extractargs!(
   define_induction_variables!(arguments, defined, expr, mod)
   head = expr.head
   args = expr.args
+
   startind = 1
   if head === :call
     startind = 2
@@ -134,6 +135,16 @@ function extractargs!(
       args[2] = get_sym!(defined, arguments, args[2], mod)
     else
       extractargs!(arguments, defined, args[2], mod)
+    end
+    return
+  elseif head === :parameters
+    for (i, arg) in enumerate(args)
+      if arg isa Symbol
+        sym = get_sym!(defined, arguments, arg, mod)
+        args[i] = Expr(:kw, arg, sym)
+      else
+        extractargs!(arguments, defined, arg, mod)
+      end
     end
     return
   end
