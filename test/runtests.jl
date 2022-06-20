@@ -357,6 +357,20 @@ end
   @test allocated(f) < 300 + 40 * Threads.nthreads()
 end
 
+@testset "locks and refvalues" begin
+  a = Ref(0.0)
+  l = Threads.SpinLock()
+  @time @batch for i in 1:1_000
+    lock(l)
+    try
+      a[] += i
+    finally
+      unlock(l)
+    end
+  end
+  @test a[] == sum(1:1_000)
+end
+
 @testset "gensym" begin
   # issue 59 (lack of gensym for keyword arguments)
   function f(; kw = 10)
