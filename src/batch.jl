@@ -284,7 +284,7 @@ end
 
 @inline function batch(
   f!::F,
-  (len, nbatches)::Tuple{Vararg{Integer,2}},
+  (len, nbatches)::Tuple{Vararg{Union{StaticInt,Integer},2}},
   args::Vararg{Any,K}) where {F,K}
 
   batch(f!, Val{false}(), (len, nbatches), args...)
@@ -293,7 +293,7 @@ end
 @inline function batch(
   f!::F,
   threadlocal::Val{thread_local},
-  (len, nbatches)::Tuple{Vararg{Integer,2}},
+  (len, nbatches)::Tuple{Vararg{Union{StaticInt,Integer},2}},
   args::Vararg{Any,K}
 ) where {F,K,thread_local}
   # threads, torelease = request_threads(Base.Threads.threadid(), nbatches - one(nbatches))
@@ -329,7 +329,7 @@ end
 end
 function batch(
   f!::F,
-  (len, nbatches, reserve_per_worker)::Tuple{Vararg{Integer,3}},
+  (len, nbatches, reserve_per_worker)::Tuple{Vararg{Union{StaticInt,Integer},3}},
   args::Vararg{Any,K};
   threadlocal::Val{thread_local} = Val(false),
 ) where {F,K,thread_local}

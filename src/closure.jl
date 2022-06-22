@@ -205,35 +205,23 @@ Base.@propagate_inbounds combine(x::AbstractArray, I, j) =
   x[combine(CombineIndices(), I, j)]
 Base.@propagate_inbounds combine(x::AbstractArray, ::NoLoop, j) = x[j]
 
-static_literals!(s::Symbol) = s
-function static_literals!(q::Expr)
-  for (i, ex) ∈ enumerate(q.args)
-    if ex isa Integer
-      q.args[i] = StaticInt(ex)
-    elseif ex isa Expr
-      static_literals!(ex)
-    end
-  end
-  q
-end
-function maybestatic!(_expr)::Expr
-  _expr isa Expr || return esc(_expr)
-  expr::Expr = _expr
-  if expr.head === :call
-    f = first(expr.args)
-    if f === :length
-      expr.args[1] = static_length
-    elseif f === :size && length(expr.args) == 3
-      i = expr.args[3]
-      if i isa Integer
-        expr.args[1] = size
-        expr.args[3] = StaticInt(i)
+function makestatic!(expr)
+  expr isa Expr || return expr
+  for i = eachindex(expr.args)
+    ex = expr.args[i]
+    if ex isa Int
+      expr.args[i] = static(ex)
+    elseif ex isa Symbol
+      if ex === :length
+        expr.args[i] = GlobalRef(ArrayInterface, :static_length)
+      elseif Base.sym_in(ex, (:axes, :size))
+        expr.args[i] = GlobalRef(ArrayInterface, ex)
       end
-    else
-      static_literals!(expr)
+    elseif ex isa Expr
+      makestatic!(ex)
     end
   end
-  esc(expr)
+  expr
 end
 function enclose(
   exorig::Expr,
@@ -322,8 +310,7 @@ function enclose(
   # typexpr_incomplete is missing `funcs`
   # outerloop = Symbol("##outer##")
   q = quote
-    $(esc(innerloop)), $loop_sym, $(esc(rcombiner)) = $splitloop($(maybestatic!(loop)))
-    # $loop_sym = $(maybestatic!(loop))
+    $(esc(innerloop)), $loop_sym, $(esc(rcombiner)) = $splitloop($(esc(makestatic!(loop))))
     $iter_leng = $static_length($loop_sym)
     $loop_step = $static_step($loop_sym)
     $loop_offs = $static_first($loop_sym)

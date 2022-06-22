@@ -58,7 +58,7 @@ function tmap!(f::F, args::Vararg{AbstractArray,K}) where {K,F}
   dest = first(args)
   N = length(dest)
   mapfun! = (allargs, start, stop) -> rangemap!(f, allargs, start, stop)
-  batch(mapfun!, (N, num_threads()), args...)
+  batch(mapfun!, (N, Int(num_threads())), args...)
   dest
 end
 function issue15!(dest, src)
@@ -119,7 +119,7 @@ end
   end
 
   function slow_cheap(n, digits)
-    x = zeros(8, num_threads())
+    x = zeros(8, Int(num_threads()))
     batch(slow_task!, (num_threads(), num_threads()), x, digits, n)
     sum(@view(x[1, 1:end]))
   end
@@ -177,15 +177,15 @@ end
     sleep(1) # if task completes two quickly, the mainthread will start stealing work back.
   end
 
-  start_indices = zeros(Int, num_threads())
-  end_indices = zeros(Int, num_threads())
+  start_indices = zeros(Int, Int(num_threads()))
+  end_indices = zeros(Int, Int(num_threads()))
 
   for range in [Int(num_threads()), 1000, 1001]
     start_indices .= 0
     end_indices .= 0
     batch(record_start_stop!, (range, num_threads()), start_indices, end_indices)
     indices_test_per_thread = end_indices .- start_indices .+ 1
-    acceptable_no_per_thread = [fld(range, num_threads()), cld(range, num_threads())]
+    acceptable_no_per_thread = [fld(range, Int(num_threads())), cld(range, Int(num_threads()))]
     @test all(in.(indices_test_per_thread, Ref(acceptable_no_per_thread)))
     @test sum(indices_test_per_thread) == range
     @test length(unique(start_indices)) == num_threads()
