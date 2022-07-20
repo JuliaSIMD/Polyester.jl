@@ -8,7 +8,8 @@ using ManualMemory: Reference
 using Static
 using Requires
 using PolyesterWeave:
-  request_threads, free_threads!, mask, UnsignedIteratorEarlyStop, assume
+  request_threads, free_threads!, mask, UnsignedIteratorEarlyStop, assume,
+  disable_polyester_threads
 using CPUSummary: num_threads, num_cores
 
 export batch, @batch, num_threads, disable_polyester_threads
@@ -16,7 +17,6 @@ export batch, @batch, num_threads, disable_polyester_threads
 
 include("batch.jl")
 include("closure.jl")
-include("utility.jl")
 
 # y = rand(1)
 # x = rand(1)
