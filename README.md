@@ -519,6 +519,9 @@ x = rand(size(y)...);
 @btime threads_of_thread($x,$y) # 4.105 ms (42059 allocations: 4.25 MiB)
 
 # The tested functions
+# All of these would be better implemented by just using @tturbo,
+# but these suboptimal implementations serve as good test case for
+# Polyster-vs-Base thread scheduling.
 
 function inner(x,y,j)
     for i ∈ axes(x,1)
