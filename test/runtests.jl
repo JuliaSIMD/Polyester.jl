@@ -2,6 +2,7 @@ println(
   "Starting tests with $(Threads.nthreads()) threads out of `Sys.CPU_THREADS = $(Sys.CPU_THREADS)`...",
 )
 using Polyester, Aqua, ForwardDiff
+using Base.Threads: @threads
 using Test
 
 function bsin!(y, x, r = eachindex(y, x))
@@ -395,10 +396,10 @@ end
   # issue 78 (lack of support for keyword arguments using only variable names without `=`)
 
   f(a; b=10.0, c=100.0) = a + b + c
-  
+
   buf = [0, 0]
   b = 0.0
-  
+
   Threads.nthreads() == 1 && println("the issue arises only on multithreading runs")
 
   @batch for i in 1:2
@@ -406,6 +407,95 @@ end
   end
 
   @test buf == [1, 2]
+end
+
+@testset "disable_polyester_threads" begin
+    function inner(x,y,j)
+        for i ∈ axes(x,1)
+            y[i,j] = sin(x[i,j])
+        end
+    end
+
+    function inner_polyester(x,y,j)
+        @batch for i ∈ axes(x,1)
+            y[i,j] = sin(x[i,j])
+        end
+    end
+
+    function inner_thread(x,y,j)
+        @threads for i ∈ axes(x,1)
+            y[i,j] = sin(x[i,j])
+        end
+    end
+
+    function sequential_sequential(x,y)
+        for j ∈ axes(x,2)
+            inner(x,y,j)
+        end
+    end
+
+    function sequential_polyester(x,y)
+        for j ∈ axes(x,2)
+            inner_polyester(x,y,j)
+        end
+    end
+
+    function sequential_thread(x,y)
+        for j ∈ axes(x,2)
+            inner_thread(x,y,j)
+        end
+    end
+
+    function threads_of_polyester(x,y)
+        @threads for j ∈ axes(x,2)
+            inner_polyester(x,y,j)
+        end
+    end
+
+    function threads_of_polyester_inner_disable(x,y)
+        @threads for j ∈ axes(x,2)
+            Polyester.disable_polyester_threads() do
+                inner_polyester(x,y,j)
+            end
+        end
+    end
+
+    function threads_of_thread(x,y)
+        @threads for j ∈ axes(x,2)
+            inner_thread(x,y,j)
+        end
+    end
+
+    function threads_of_sequential(x,y)
+        @threads for j ∈ axes(x,2)
+            inner(x,y,j)
+        end
+    end
+
+    y = rand(10,10); # (size of inner problem, size of outer problem)
+    x = rand(size(y)...);
+    inner(x,y,1)
+    good_y = copy(y)
+    inner_polyester(x,y,1)
+    @assert good_y == y
+    inner_thread(x,y,1)
+    @assert good_y == y
+    sequential_sequential(x,y)
+    good_y = copy(y)
+    sequential_polyester(x,y)
+    @assert good_y == y
+    sequential_thread(x,y)
+    @assert good_y == y
+    threads_of_polyester(x,y)
+    @assert good_y == y
+    threads_of_polyester_inner_disable(x,y)
+    @assert good_y == y
+    disable_polyester_threads() do; threads_of_polyester(x,y) end
+    @assert good_y == y
+    threads_of_sequential(x,y)
+    @assert good_y == y
+    threads_of_thread(x,y)
+    @assert good_y == y
 end
 
 if VERSION ≥ v"1.6"
