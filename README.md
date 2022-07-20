@@ -413,6 +413,8 @@ Note that `@batch` defaults to using up to one thread per physical core, instead
 is because [LoopVectorization.jl](https://github.com/JuliaSIMD/LoopVectorization.jl) currently only uses up to 1 thread per physical core, and switching the number of
 threads incurs some overhead. See the docstring on `@batch` (i.e., `?@batch` in a Julia REPL) for some more discussion.
 
+## Local per-thread storage
+
 You also can define local storage for each thread, providing a vector containing each of the local storages at the end.
 
 ```julia
@@ -447,3 +449,164 @@ julia> let
 
 Float16[83.0, 90.0, 27.0, 65.0]
 ```
+
+## Disabling Polyester threads
+
+When running many repetitions of a Polyester-multithreaded function (e.g. in an embarrassingly parallel problem that repeatedly executes a small already Polyester-multithreaded function), it can be beneficial to disable Polyester (the inner multithreaded loop) and multithread only at the outer level (e.g. with `Base.Threads`). This can be done with the `disable_polyester_threads` context manager. In the expandable section below you can see examples with benchmarks.
+
+It is best to call `disable_polyester_threads` only once, before any `@thread` uses happen, to avoid overhead. E.g. best to do it as:
+```julia
+disable_polyester_threads() do
+    @threads for i in 1:n
+        f()
+    end
+end
+```
+instead of doing it in the following unnecessarily slow manner:
+```julia
+@threads for i in 1:n # DO NOT DO THIS
+    disable_polyester_threads() do # IT HAS UNNECESSARY OVERHEAD
+        f()
+    end
+end
+```
+
+
+<details>
+<summary>Benchmarks of nested multi-threading with Polyester</summary>
+    
+```julia
+# Big inner problem, repeated only a few times
+
+y = rand(10000000,4);
+x = rand(size(y)...);
+
+@btime inner($x,$y,1) # 73.319 ms (0 allocations: 0 bytes)
+@btime inner_polyester($x,$y,1) # 8.936 ms (0 allocations: 0 bytes)
+@btime inner_thread($x,$y,1) # 11.206 ms (49 allocations: 4.56 KiB)
+
+@btime sequential_sequential($x,$y) # 274.926 ms (0 allocations: 0 bytes)
+@btime sequential_polyester($x,$y) # 36.963 ms (0 allocations: 0 bytes)
+@btime sequential_thread($x,$y) # 49.373 ms (196 allocations: 18.25 KiB)
+
+@btime threads_of_polyester($x,$y) # 78.828 ms (58 allocations: 4.84 KiB)
+# the following is a purposefully suboptimal way to disable threads
+@btime threads_of_polyester_inner_disable($x,$y) # 70.182 ms (47 allocations: 4.50 KiB)
+# the following is a good way to disable threads (the disable call happening once in the outer scope)
+@btime Polyester.disable_polyester_threads() do; threads_of_polyester($x,$y) end; # 71.141 ms (47 allocations: 4.50 KiB)
+@btime threads_of_sequential($x,$y) # 70.857 ms (46 allocations: 4.47 KiB)
+@btime threads_of_thread($x,$y) # 45.116 ms (219 allocations: 22.00 KiB)
+
+# Small inner problem, repeated many times
+
+y = rand(1000,1000);
+x = rand(size(y)...);
+
+@btime inner($x,$y,1) # 7.028 μs (0 allocations: 0 bytes)
+@btime inner_polyester($x,$y,1) # 1.917 μs (0 allocations: 0 bytes)
+@btime inner_thread($x,$y,1) # 7.544 μs (45 allocations: 4.44 KiB)
+
+@btime sequential_sequential($x,$y) # 6.790 ms (0 allocations: 0 bytes)
+@btime sequential_polyester($x,$y) # 2.070 ms (0 allocations: 0 bytes)
+@btime sequential_thread($x,$y) # 9.296 ms (49002 allocations: 4.46 MiB)
+
+@btime threads_of_polyester($x,$y) # 2.090 ms (42 allocations: 4.34 KiB)
+# the following is a purposefully suboptimal way to disable threads
+@btime threads_of_polyester_inner_disable($x,$y) # 1.065 ms (42 allocations: 4.34 KiB)
+# the following is a good way to disable threads (the disable call happening once in the outer scope)
+@btime Polyester.disable_polyester_threads() do; threads_of_polyester($x,$y) end; # 997.918 μs (49 allocations: 4.56 KiB)
+@btime threads_of_sequential($x,$y) # 1.057 ms (48 allocations: 4.53 KiB)
+@btime threads_of_thread($x,$y) # 4.105 ms (42059 allocations: 4.25 MiB)
+
+# The tested functions
+# All of these would be better implemented by just using @tturbo,
+# but these suboptimal implementations serve as good test case for
+# Polyster-vs-Base thread scheduling.
+
+function inner(x,y,j)
+    for i ∈ axes(x,1)
+        y[i,j] = sin(x[i,j])
+    end
+end
+
+function inner_polyester(x,y,j)
+    @batch for i ∈ axes(x,1)
+        y[i,j] = sin(x[i,j])
+    end
+end
+
+function inner_thread(x,y,j)
+    @threads for i ∈ axes(x,1)
+        y[i,j] = sin(x[i,j])
+    end
+end
+
+function sequential_sequential(x,y)
+    for j ∈ axes(x,2)
+        inner(x,y,j)
+    end
+end
+
+function sequential_polyester(x,y)
+    for j ∈ axes(x,2)
+        inner_polyester(x,y,j)
+    end
+end
+
+function sequential_thread(x,y)
+    for j ∈ axes(x,2)
+        inner_thread(x,y,j)
+    end
+end
+
+function threads_of_polyester(x,y)
+    @threads for j ∈ axes(x,2)
+        inner_polyester(x,y,j)
+    end
+end
+
+function threads_of_polyester_inner_disable(x,y)
+    # XXX This is a bad way to disable Polyester threads as
+    # it causes unnecessary overhead for each @threads thread.
+    # See the benchmarks above for a better way.
+    @threads for j ∈ axes(x,2)
+        Polyester.disable_polyester_threads() do
+            inner_polyester(x,y,j)
+        end
+    end
+end
+
+function threads_of_thread(x,y)
+    @threads for j ∈ axes(x,2)
+        inner_thread(x,y,j)
+    end
+end
+
+function threads_of_thread(x,y)
+    @threads for j ∈ axes(x,2)
+        inner_thread(x,y,j)
+    end
+end
+
+function threads_of_sequential(x,y)
+    @threads for j ∈ axes(x,2)
+        inner(x,y,j)
+    end
+end
+```
+Benchmarks executed on:
+```
+Julia Version 1.9.0-DEV.998
+Commit e1739aa42a1 (2022-07-18 10:27 UTC)
+Platform Info:
+  OS: Linux (x86_64-linux-gnu)
+  CPU: 16 × AMD Ryzen 7 1700 Eight-Core Processor
+  WORD_SIZE: 64
+  LIBM: libopenlibm
+  LLVM: libLLVM-14.0.5 (ORCJIT, znver1)
+  Threads: 8 on 16 virtual cores
+Environment:
+  JULIA_EDITOR = code
+  JULIA_NUM_THREADS = 8
+```
+</details>
