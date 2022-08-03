@@ -153,11 +153,10 @@ end
         $launch_quote
         start = stop
       end
-      Nr -= nthread
+      Nr = (Nr - nthread) % Int
     end
     $rem_quote
-    for (threadmask, nthread, torelease) ∈
-        zip(threadmask_tuple, nthread_tuple, torelease_tuple)
+    for (threadmask, nthread) ∈ zip(threadmask_tuple, nthread_tuple)
       tm = mask(UnsignedIteratorEarlyStop(threadmask, nthread))
       tid = 0x00000000
       while tm ≠ zero(tm)
@@ -169,8 +168,8 @@ end
         # @show tid, ThreadingUtilities._atomic_state(tid)
         ThreadingUtilities.wait(tid)
       end
-      free_threads!(torelease)
     end
+    free_threads!(torelease_tuple)
     nothing
   end
   gcpr = Expr(:gc_preserve, block, :cfunc)
@@ -314,7 +313,7 @@ end
   end
   nbatch = nthread + one(nthread)
   Nd = Base.udiv_int(ulen, nbatch % UInt) # reasonable for `ulen` to be ≥ 2^32
-  Nr = ulen - Nd * nbatch
+  Nr = (ulen - Nd * nbatch) % Int
   _batch_no_reserve(
     f!,
     threadlocal,
