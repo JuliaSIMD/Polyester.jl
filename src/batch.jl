@@ -114,7 +114,7 @@ end
   threadmask_tuple::NTuple{N},
   nthread_tuple,
   torelease_tuple,
-  Nr,
+  Nr::Int,
   Nd,
   ulen,
   args::Vararg{Any,K},
