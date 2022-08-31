@@ -156,9 +156,9 @@ end
       Nr = (Nr - nthread) % Int
     end
     $rem_quote
+    tid = 0x00000000
     for (threadmask, nthread) ∈ zip(threadmask_tuple, nthread_tuple)
       tm = mask(UnsignedIteratorEarlyStop(threadmask, nthread))
-      tid = 0x00000000
       while tm ≠ zero(tm)
         # assume(tm ≠ zero(tm)) 
         tz = trailing_zeros(tm) % UInt32
