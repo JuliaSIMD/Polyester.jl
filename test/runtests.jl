@@ -256,7 +256,7 @@ splitloop(e::Base.Iterators.Enumerate{LazyTree{T}}) where {T} =
 combine(e::Iterators.Enumerate{LazyTree{T}}, ::NoLoop, j) where {T} = @inbounds e[j]
 Base.getindex(e::Iterators.Enumerate{LazyTree{T}}, row::Int) where {T} =
   (row, first(iterate(e.itr, row)))
-function Base.iterate(tree::LazyTree, idx = 1) where {T<:LazyTree}
+function Base.iterate(tree::LazyTree, idx = 1)
   idx > length(tree) && return nothing
   return tree.t[idx], idx + 1
 end
