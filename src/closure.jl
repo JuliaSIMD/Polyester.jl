@@ -16,17 +16,19 @@ extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, sym, mod) 
 #   nothing
 # end
 function define_tup!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, ex::Expr, mod)
-  for (i, a) ∈ enumerate(ex.args)
-    if a isa Symbol
-      ex.args[i] = getgensym!(defined, a)
-    elseif Meta.isexpr(a, :tuple)
-      define_tup!(defined, a)
-    elseif Meta.isexpr(a, :ref)
-      extractargs!(arguments, defined, a, mod)
-    else
-      throw("Don't know how to handle:\n $a")
+    for (i, a) ∈ enumerate(ex.args)
+        if a isa Symbol
+            ex.args[i] = getgensym!(defined, a)
+        elseif Meta.isexpr(a, :tuple)
+            define_tup!(Symbol[a.args...], defined, a, mod)
+        elseif Meta.isexpr(a, :ref)
+            extractargs!(arguments, defined, a, mod)
+        elseif Meta.isexpr(a, :parameters)
+            define_tup!(Symbol[a.args...], defined, a, mod)
+        else
+            throw("Don't know how to handle:\n $a")
+        end
     end
-  end
 end
 function define1!(
   arguments::Vector{Symbol},

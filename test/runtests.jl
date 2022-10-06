@@ -392,6 +392,17 @@ end
   @test buf == [3, 4]
 end
 
+@testset "tuple and keywork unpacking" begin
+  # issue 75
+  buf = (1, (2,3))
+  dest = zeros(Int, 3)
+  @batch for i = 1:2
+      (a, (b,c)) = buf
+      dest .= [a,b,c]
+  end
+  @test dest == [1,2,3]
+end
+
 @testset "gensym keywords with implicit name" begin
   # issue 78 (lack of support for keyword arguments using only variable names without `=`)
 
