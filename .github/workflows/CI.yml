@@ -19,8 +19,10 @@ jobs:
           - x86
           - x64
         juliacputhreads:
+          - 1
           - 3
         juliathreads:
+          - 1
           - 2
           - 4
     steps:
