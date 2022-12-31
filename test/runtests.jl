@@ -2,6 +2,7 @@ println(
   "Starting tests with $(Threads.nthreads()) threads out of `Sys.CPU_THREADS = $(Sys.CPU_THREADS)`...",
 )
 using Polyester, Aqua, ForwardDiff
+using PolyesterWeave: dynamic_thread_count # min(Sys.CPU_THREADS, Threads.nthreads())
 using Base.Threads: @threads
 using Test
 
@@ -178,19 +179,19 @@ end
     sleep(1) # if task completes two quickly, the mainthread will start stealing work back.
   end
 
-  start_indices = zeros(Int, Int(num_threads()))
-  end_indices = zeros(Int, Int(num_threads()))
+  start_indices = zeros(Int, dynamic_thread_count())
+  end_indices = zeros(Int, dynamic_thread_count())
 
-  for range in [Int(num_threads()), 1000, 1001]
+  for range in [num_threads(), dynamic_thread_count(), 1000, 1001]
     start_indices .= 0
     end_indices .= 0
-    batch(record_start_stop!, (range, num_threads()), start_indices, end_indices)
+    batch(record_start_stop!, (range, dynamic_thread_count()), start_indices, end_indices)
     indices_test_per_thread = end_indices .- start_indices .+ 1
-    acceptable_no_per_thread = [fld(range, Int(num_threads())), cld(range, Int(num_threads()))]
+    acceptable_no_per_thread = [fld(range, dynamic_thread_count()), cld(range, dynamic_thread_count())]
     @test all(in.(indices_test_per_thread, Ref(acceptable_no_per_thread)))
     @test sum(indices_test_per_thread) == range
-    @test length(unique(start_indices)) == num_threads()
-    @test length(unique(end_indices)) == num_threads()
+    @test length(unique(start_indices)) == dynamic_thread_count()
+    @test length(unique(end_indices)) == dynamic_thread_count()
   end
 end
 
