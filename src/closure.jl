@@ -16,19 +16,19 @@ extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, sym, mod) 
 #   nothing
 # end
 function define_tup!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, ex::Expr, mod)
-    for (i, a) ∈ enumerate(ex.args)
-        if a isa Symbol
-            ex.args[i] = getgensym!(defined, a)
-        elseif Meta.isexpr(a, :tuple)
-            define_tup!(Symbol[a.args...], defined, a, mod)
-        elseif Meta.isexpr(a, :ref)
-            extractargs!(arguments, defined, a, mod)
-        elseif Meta.isexpr(a, :parameters)
-            define_tup!(Symbol[a.args...], defined, a, mod)
-        else
-            throw("Don't know how to handle:\n $a")
-        end
+  for (i, a) ∈ enumerate(ex.args)
+    if a isa Symbol
+      ex.args[i] = getgensym!(defined, a)
+    elseif Meta.isexpr(a, :tuple)
+      define_tup!(Symbol[a.args...], defined, a, mod)
+    elseif Meta.isexpr(a, :ref)
+      extractargs!(arguments, defined, a, mod)
+    elseif Meta.isexpr(a, :parameters)
+      define_tup!(Symbol[a.args...], defined, a, mod)
+    else
+      throw("Don't know how to handle:\n $a")
     end
+  end
 end
 function define1!(
   arguments::Vector{Symbol},
@@ -209,7 +209,7 @@ Base.@propagate_inbounds combine(x::AbstractArray, ::NoLoop, j) = x[j]
 
 function makestatic!(expr)
   expr isa Expr || return expr
-  for i = eachindex(expr.args)
+  for i in eachindex(expr.args)
     ex = expr.args[i]
     if ex isa Int
       expr.args[i] = static(ex)
@@ -318,7 +318,7 @@ function enclose(
     $loop_offs = $static_first($loop_sym)
   end
   threadtup = Expr(:tuple, iter_leng)
-  num_thread_expr = Expr(:call, num_threads)
+  num_thread_expr = Expr(:call, Threads.nthreads)
   if per === :core
     num_thread_expr = Expr(:call, min, num_thread_expr, Expr(:call, num_cores))
   end
@@ -414,7 +414,7 @@ function enclose(
   end
   push!(q.args, batchcall)
   quote
-    if $num_threads() == 1
+    if $(Threads.nthreads)() == 1
       single_thread_result = begin
         $(esc(threadlocal_init_single)) # Initialize threadlocal storage
         $(esc(q_single))
