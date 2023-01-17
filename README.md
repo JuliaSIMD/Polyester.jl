@@ -6,6 +6,8 @@
 [![CI-Nightly](https://github.com/JuliaSIMD/Polyester.jl/actions/workflows/CI-julia-nightly.yml/badge.svg)](https://github.com/JuliaSIMD/Polyester.jl/actions/workflows/CI-julia-nightly.yml)
 [![Coverage](https://codecov.io/gh/JuliaSIMD/Polyester.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/JuliaSIMD/Polyester.jl)
 
+Note that `Polyester.@batch` moves arrays to threads by turning them into [StrideArraysCore.PtrArray](https://github.com/JuliaSIMD/StrideArraysCore.jl)s.
+This means that under an `@batch` slices will create `view`s by default, and that you may also need to start Julia with `--check-bounds=yes` while debugging.
 
 Polyester.jl provides low overhead threading.
 The primary API is `@batch`, which can be used in place of `Threads.@threads`.
