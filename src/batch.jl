@@ -25,7 +25,7 @@ end
       @cfunction($(Expr(:$, :bc)), Cvoid, (Ptr{UInt},))
     end
   end
-  return Expr(:block, Expr(:meta,:inline), q)
+  return Expr(:block, Expr(:meta, :inline), q)
 end
 # @inline function batch_closure(f::F, args::A, ::Val{C}) where {F,A,C}
 #   bc = BatchClosure{F,A,C}(f)
@@ -283,8 +283,9 @@ end
 
 @inline function batch(
   f!::F,
-  (len, nbatches)::Tuple{Vararg{Union{StaticInt,Integer},2}},
-  args::Vararg{Any,K}) where {F,K}
+  (len, nbatches)::Tuple{Vararg{Any,2}},
+  args::Vararg{Any,K},
+) where {F,K}
 
   batch(f!, Val{false}(), (len, nbatches), args...)
 end
@@ -292,8 +293,8 @@ end
 @inline function batch(
   f!::F,
   threadlocal::Val{thread_local},
-  (len, nbatches)::Tuple{Vararg{Union{StaticInt,Integer},2}},
-  args::Vararg{Any,K}
+  (len, nbatches)::Tuple{Vararg{Any,2}},
+  args::Vararg{Any,K},
 ) where {F,K,thread_local}
   # threads, torelease = request_threads(Base.Threads.threadid(), nbatches - one(nbatches))
   len > 0 || return
@@ -323,12 +324,12 @@ end
     Nr,
     Nd,
     ulen,
-    args...
+    args...,
   )
 end
 function batch(
   f!::F,
-  (len, nbatches, reserve_per_worker)::Tuple{Vararg{Union{StaticInt,Integer},3}},
+  (len, nbatches, reserve_per_worker)::Tuple{Vararg{Any,3}},
   args::Vararg{Any,K};
   threadlocal::Val{thread_local} = Val(false),
 ) where {F,K,thread_local}

@@ -9,7 +9,6 @@ import ArrayInterface
 using ArrayInterface: static_length, static_step, static_first, size
 using StrideArraysCore: object_and_preserve
 using ManualMemory: Reference
-using Static
 using Requires
 using PolyesterWeave:
   request_threads,
