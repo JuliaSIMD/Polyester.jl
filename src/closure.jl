@@ -329,9 +329,9 @@ function enclose(
     #   push!(threadtup.args, :(min($iter_leng, cld($num_thread_expr, $reserve_per))), reserve_per)
     # end
   else
-    il = :(div(
-      $iter_leng,
-      $(minbatchsize isa Int ? StaticInt(minbatchsize) : esc(minbatchsize)),
+    il = :(Base.sdiv_int(
+      Int($iter_leng)::Int,
+      $(minbatchsize isa Int ? minbatchsize : :(Int($(esc(minbatchsize)))::Int)),
     ))
     # if reserve_per ≤ 0
     push!(threadtup.args, :(min($il, $num_thread_expr)))
