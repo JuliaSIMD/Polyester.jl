@@ -214,10 +214,10 @@ function makestatic!(expr)
     if ex isa Int
       expr.args[i] = static(ex)
     elseif ex isa Symbol
-      if ex === :length
-        expr.args[i] = GlobalRef(ArrayInterface, :static_length)
-      elseif Base.sym_in(ex, (:axes, :size))
-        expr.args[i] = GlobalRef(ArrayInterface, ex)
+      j = findfirst(==(ex), (:axes, :size, :length))
+      if j !== nothing
+        expr.args[i] =
+          GlobalRef(ArrayInterface, (:static_axes, :static_size, :static_length)[j])
       end
     elseif ex isa Expr
       makestatic!(ex)

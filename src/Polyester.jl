@@ -1,12 +1,12 @@
 module Polyester
-if isdefined(Base, :Experimental) &&
-   isdefined(Base.Experimental, Symbol("@max_methods"))
-    @eval Base.Experimental.@max_methods 1
+if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@max_methods"))
+  @eval Base.Experimental.@max_methods 1
 end
 
 using ThreadingUtilities
-import ArrayInterface
-using ArrayInterface: static_length, static_step, static_first, size
+import StaticArrayInterface
+const ArrayInterface = StaticArrayInterface
+using StaticArrayInterface: static_length, static_step, static_first, static_size
 using StrideArraysCore: object_and_preserve
 using ManualMemory: Reference
 using Static
