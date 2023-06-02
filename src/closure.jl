@@ -440,10 +440,10 @@ Evaluate the loop on multiple threads.
 
 Create a thread-local storage used in the loop.
 
-    @batch localthread=init() for i in Iter; ...; end
+    @batch threadlocal=init() for i in Iter; ...; end
 
-The `init` function will be called at the start at each thread. `localthread` will
-refer to storage local for the thread. At the end of the loop, a `localthread`
+The `init` function will be called at the start at each thread. `threadlocal` will
+refer to storage local for the thread. At the end of the loop, a `threadlocal`
 vector containing all the thread-local values will be available. A type can be specified
 with `threadlocal=init()::Type`.
 
