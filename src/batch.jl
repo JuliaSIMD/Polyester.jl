@@ -295,8 +295,13 @@ end
   (len, nbatches)::Tuple{Vararg{Union{StaticInt,Integer},2}},
   args::Vararg{Any,K}
 ) where {F,K,thread_local}
-  # threads, torelease = request_threads(Base.Threads.threadid(), nbatches - one(nbatches))
   len > 0 || return
+  if (nbatches > len)
+    if (typeof(nbatches) !== typeof(len))
+      return batch(f!, threadlocal, (len, len), args...)
+    end
+    nbatches = len
+  end
   ulen = len % UInt
   nbatches == 0 && @goto SERIAL
   threads, torelease = request_threads(nbatches - one(nbatches))
