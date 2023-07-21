@@ -528,7 +528,7 @@ end
     return dst
   end
 
-  dst = zeros(Int, 2 * num_threads)
+  dst = zeros(Int, 2 * max(num_threads, Threads.nthreads(), (Sys.CPU_THREADS)::Int))
   @test_nowarn issue30_set!(dst)
   if !(runs_on_ci && (Int == Int32))
     # There are issues on x86 systems in GitHub actions I don't understand
