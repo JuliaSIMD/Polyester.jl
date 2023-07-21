@@ -521,9 +521,9 @@ end
     return dst
   end
 
-  dst = zeros(Int, 2 * Threads.nthreads())
+  dst = zeros(Int, 2 * dynamic_thread_count())
   @test_nowarn issue30_set!(dst)
-  @test sort!(unique(dst)) == 1:Threads.nthreads()
+  @test sort!(unique(dst)) == 1:dynamic_thread_count()
 
   function issue30_throw!(dst)
     @batch for i in eachindex(dst)
@@ -544,7 +544,7 @@ end
   # Multithreading works again after resetting the threads
   @test_nowarn Polyester.reset_threads!()
   @test_nowarn issue30_set!(dst)
-  @test sort!(unique(dst)) == 1:Threads.nthreads()
+  @test sort!(unique(dst)) == 1:dynamic_thread_count()
 end
 
 if VERSION ≥ v"1.6"
