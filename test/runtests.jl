@@ -513,6 +513,40 @@ end
   @assert good_y == y
 end
 
+@testset "reset_threads!" begin
+  function issue30_set!(dst)
+    @batch for i in eachindex(dst)
+      dst[i] = Threads.threadid()
+    end
+    return dst
+  end
+
+  dst = zeros(Int, 2 * Threads.nthreads())
+  @test_nowarn issue30_set!(dst)
+  @test sort!(unique(dst)) == 1:Threads.nthreads()
+
+  function issue30_throw!(dst)
+    @batch for i in eachindex(dst)
+      dst[i] = Threads.threadid()
+      if i > 1
+        throw(DomainError("expected error"))
+      end
+    end
+    return dst
+  end
+
+  # After throwing an error, the current implementation
+  # disables multithreading
+  @test_throws DomainError issue30_throw!(dst)
+  @test_nowarn issue30_set!(dst)
+  @test sort!(unique(dst)) == 1:1
+
+  # Multithreading works again after resetting the threads
+  @test_nowarn Polyester.reset_threads!()
+  @test_nowarn issue30_set!(dst)
+  @test sort!(unique(dst)) == 1:Threads.nthreads()
+end
+
 if VERSION ≥ v"1.6"
   println("Package tests complete. Running `Aqua` checks.")
   Aqua.test_all(Polyester)
