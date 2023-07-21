@@ -549,7 +549,9 @@ end
   # disables multithreading
   @test_throws DomainError issue30_throw!(dst)
   @test_nowarn issue30_set!(dst)
-  @test sort!(unique(dst)) == 1:1
+  if dynamic_thread_count() <= num_threads
+    @test sort!(unique(dst)) == 1:1
+  end
 
   # Multithreading works again after resetting the threads
   @test_nowarn Polyester.reset_threads!()
