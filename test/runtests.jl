@@ -519,7 +519,7 @@ end
   if runs_on_ci
     sys_threads = min(sys_threads, 2)
   end
-  num_threads = min(Threads.nthreads(), sys_threads) - 1
+  num_threads = min(Threads.nthreads(), sys_threads)
 
   function issue30_set!(dst)
     @batch for i in eachindex(dst)
