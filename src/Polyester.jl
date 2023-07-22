@@ -12,6 +12,7 @@ using ManualMemory: Reference
 using Static
 using Requires
 using PolyesterWeave:
+  PolyesterWeave,
   request_threads,
   free_threads!,
   mask,
@@ -24,6 +25,20 @@ export batch, @batch, disable_polyester_threads
 
 include("batch.jl")
 include("closure.jl")
+
+
+# see https://github.com/JuliaSIMD/Polyester.jl/issues/30
+"""
+    Polyester.reset_threads!()
+
+Resets the threads used by [Polyester.jl](https://github.com/JuliaSIMD/Polyester.jl).
+"""
+function reset_threads!()
+  PolyesterWeave.reset_workers!()
+  foreach(ThreadingUtilities.checktask,
+          eachindex(ThreadingUtilities.TASKS))
+  return nothing
+end
 
 # y = rand(1)
 # x = rand(1)
