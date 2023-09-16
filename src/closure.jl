@@ -495,8 +495,7 @@ You can pass both `per=(core/thread)` and `minbatch=N` options at the same time,
 
     @batch stride=true for i in Iter; ...; end
 
-This may be better for load balancing if iterations close to each other take a similar amount of time, but iterations far apart take different lengths of time. Setting this also makes `per=thread` the default, unless `per=core` was explicitly specified.
-`stride=false` is the default.
+This may be better for load balancing if iterations close to each other take a similar amount of time, but iterations far apart take different lengths of time. Setting this also forces `per=thread`. The default is `stride=false`.
 """
 macro batch(ex)
   enclose(
