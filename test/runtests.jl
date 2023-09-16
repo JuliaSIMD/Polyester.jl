@@ -532,9 +532,6 @@ end
 @testset "reset_threads!" begin
   sys_threads::Int = (Sys.CPU_THREADS)::Int
   runs_on_ci = parse(Bool, get(ENV, "GITHUB_ACTIONS", "false"))
-  if runs_on_ci
-    sys_threads = min(sys_threads, 2)
-  end
   num_threads = min(Threads.nthreads(), sys_threads)
 
   function issue30_set!(dst)
