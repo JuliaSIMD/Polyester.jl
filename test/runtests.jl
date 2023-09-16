@@ -522,7 +522,7 @@ end
   num_threads = min(Threads.nthreads(), sys_threads)
 
   function issue30_set!(dst)
-    @batch for i in eachindex(dst)
+    @batch per=thread for i in eachindex(dst)
       dst[i] = Threads.threadid()
     end
     return dst
@@ -536,7 +536,7 @@ end
   end
 
   function issue30_throw!(dst)
-    @batch for i in eachindex(dst)
+    @batch per=thread for i in eachindex(dst)
       dst[i] = Threads.threadid()
       if i > 1
         throw(DomainError("expected error"))
