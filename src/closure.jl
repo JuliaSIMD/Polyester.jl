@@ -385,7 +385,11 @@ function enclose(exorig::Expr, minbatchsize, per::Symbol, threadlocal_tuple, str
   closureq = quote
     $closure = let
       @inline $closure_args -> begin
-        local var"##STEP##" = $(stride ? :($loop_step * Threads.nthreads()) : loop_step)
+        local var"##STEP##" = $(
+          stride ?
+          :($loop_step * min(Threads.nthreads()::Int, Sys.CPU_THREADS::Int)) :
+          loop_step
+        )
         local $loopstart = $loop_start_expr
         local $loop_stop = $loop_stop_expr
         # $(stride ? :(@show $loopstart, $loop_stop) : nothing)
