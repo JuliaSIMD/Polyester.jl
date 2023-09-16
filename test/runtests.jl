@@ -513,6 +513,55 @@ end
   @assert good_y == y
 end
 
+@testset "reset_threads!" begin
+  sys_threads::Int = (Sys.CPU_THREADS)::Int
+  runs_on_ci = parse(Bool, get(ENV, "GITHUB_ACTIONS", "false"))
+  if runs_on_ci
+    sys_threads = min(sys_threads, 2)
+  end
+  num_threads = min(Threads.nthreads(), sys_threads)
+
+  function issue30_set!(dst)
+    @batch for i in eachindex(dst)
+      dst[i] = Threads.threadid()
+    end
+    return dst
+  end
+
+  dst = zeros(Int, 2 * max(num_threads, Threads.nthreads(), (Sys.CPU_THREADS)::Int))
+  @test_nowarn issue30_set!(dst)
+  if !(runs_on_ci && (Int == Int32))
+    # There are issues on x86 systems in GitHub actions I don't understand
+    @test sort!(unique(dst)) == 1:num_threads
+  end
+
+  function issue30_throw!(dst)
+    @batch for i in eachindex(dst)
+      dst[i] = Threads.threadid()
+      if i > 1
+        throw(DomainError("expected error"))
+      end
+    end
+    return dst
+  end
+
+  # After throwing an error, the current implementation
+  # disables multithreading
+  @test_throws DomainError issue30_throw!(dst)
+  @test_nowarn issue30_set!(dst)
+  if dynamic_thread_count() <= num_threads
+    @test sort!(unique(dst)) == 1:1
+  end
+
+  # Multithreading works again after resetting the threads
+  @test_nowarn Polyester.reset_threads!()
+  @test_nowarn issue30_set!(dst)
+  if !(runs_on_ci && (Int == Int32))
+    # There are issues on x86 systems in GitHub actions I don't understand
+    @test sort!(unique(dst)) == 1:num_threads
+  end
+end
+
 if VERSION ≥ v"1.6"
   println("Package tests complete. Running `Aqua` checks.")
   Aqua.test_all(Polyester)
