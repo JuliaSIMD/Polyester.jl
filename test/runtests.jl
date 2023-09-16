@@ -12,6 +12,12 @@ function bsin!(y, x, r = eachindex(y, x))
   end
   return y
 end
+function bsin_stride!(y, x, r = eachindex(y, x))
+  @batch stride = true for i ∈ r
+    y[i] = sin(x[i])
+  end
+  return y
+end
 function bcos!(y, x)
   @batch per = core for i ∈ eachindex(y, x)
     local cxᵢ
@@ -99,6 +105,12 @@ function issue25!(dest, x, y)
   end
   dest
 end
+function issue25_but_with_strides!(dest, x, y)
+  @batch stride = true for (i, j) ∈ Iterators.product(eachindex(x), eachindex(y))
+    dest[i, j] = x[i, begin] * y[j, end]
+  end
+  dest
+end
 
 
 @testset "Range Map" begin
@@ -140,6 +152,8 @@ end
   y = similar(x)
   z = similar(y)
   @test bsin!(y, x) == (z .= sin.(x))
+  fill!(y, NaN)
+  @test bsin_stride!(y, x) == z
   @test bcos!(y, x) == (z .= cos.(x))
   @views z[1:3:length(x)] .= sin.(x[1:3:length(x)])
   @test bsin!(y, x, 1:3:length(x)) == z
@@ -168,6 +182,8 @@ end
     dest0 = similar(dest1)
     # TODO: don't only thread outer
     @test issue25!(dest0, x, y) ≈ dest1
+    fill!(dest0, NaN)
+    @test issue25_but_with_strides!(dest0, x, y) ≈ dest1
   end
 end
 
@@ -519,7 +535,7 @@ end
   num_threads = min(Threads.nthreads(), sys_threads)
 
   function issue30_set!(dst)
-    @batch per=thread for i in eachindex(dst)
+    @batch per = thread for i in eachindex(dst)
       dst[i] = Threads.threadid()
     end
     return dst
@@ -533,7 +549,7 @@ end
   end
 
   function issue30_throw!(dst)
-    @batch per=thread for i in eachindex(dst)
+    @batch per = thread for i in eachindex(dst)
       dst[i] = Threads.threadid()
       if i > 1
         throw(DomainError("expected error"))
