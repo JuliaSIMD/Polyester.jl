@@ -496,7 +496,7 @@ This may be better for load balancing if iterations close to each other take a s
 `stride=false` is the default.
 """
 macro batch(ex)
-  enclose(macroexpand(__module__, ex), 0, 1, :core, (Symbol(""), :Any), __module__)
+  enclose(macroexpand(__module__, ex), 0, 1, :core, (Symbol(""), :Any), false, __module__)
 end
 function interpret_kwarg(
   arg,
