@@ -429,8 +429,10 @@ function enclose(exorig::Expr, minbatchsize, per::Symbol, threadlocal_tuple, str
     var"##NUM#THREADS##" = $(Threads.nthreads())
     $(stride ? iter_len_def : nothing)
     if (
-      stride ? :((var"##NUM#THREADS##" == 1) || (var"##NUM#THREADS##" > $iter_leng)) :
-      (var"##NUM#THREADS##" == 1)
+      $(
+        stride ? :((var"##NUM#THREADS##" == 1) || (var"##NUM#THREADS##" > $iter_leng)) :
+        :(var"##NUM#THREADS##" == 1)
+      )
     )
       single_thread_result = begin
         $(esc(threadlocal_init_single)) # Initialize threadlocal storage
