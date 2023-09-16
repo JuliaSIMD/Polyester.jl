@@ -225,15 +225,7 @@ function makestatic!(expr)
   end
   expr
 end
-function enclose(
-  exorig::Expr,
-  reserve_per,
-  minbatchsize,
-  per::Symbol,
-  threadlocal_tuple,
-  stride,
-  mod,
-)
+function enclose(exorig::Expr, minbatchsize, per::Symbol, threadlocal_tuple, stride, mod)
   Meta.isexpr(exorig, :for, 2) ||
     throw(ArgumentError("Expression invalid; should be a for loop."))
   ex = copy(exorig)
@@ -246,7 +238,8 @@ function enclose(
   innerloop = Symbol("##inner##loop##")
   rcombiner = Symbol("##split##recombined##")
   threadlocal_var = Symbol("threadlocal")
-
+  #FIXME: don't do this?
+  per = stride ? :thread : per
   # arguments = Symbol[]#loop_offs, loop_step]
   arguments = Symbol[innerloop, rcombiner]#loop_offs, loop_step]
   defined = Dict{Symbol,Symbol}(loop_offs => loop_offs, loop_step => loop_step)
@@ -275,7 +268,7 @@ function enclose(
     quote
       # for $(firstloop.args[1]) in
       var"##outer##"::Int = Int($loopstart)::Int
-      while $loopstart <= $loop_stop
+      while var"##outer##" <= $loop_stop
         for var"##inner##" in $innerloop
           $fla1 = $combine($rcombiner, var"##inner##", var"##outer##")
           $body
@@ -291,7 +284,7 @@ function enclose(
     quote
       # for $(firstloop.args[1]) in
       var"##outer##"::Int = Int($loopstart)::Int
-      while $loopstart <= $loop_stop
+      while var"##outer##" <= $loop_stop
         for var"##inner##" in $innerloop
           $fla1 = $combine($rcombiner, var"##inner##", var"##outer##")
           $body
@@ -325,11 +318,14 @@ function enclose(
     Symbol("##NUM#THREADS##")
   end
 
+  iter_len_def = quote
+    $(esc(innerloop)), $loop_sym, $(esc(rcombiner)) = $splitloop($(esc(makestatic!(loop))))
+    $iter_leng = $static_length($loop_sym)
+  end
+
   q = quote
     var"##NUM#THREADS#TO#USE##" = $num_thread_expr
-    $(esc(innerloop)), $loop_sym, $(esc(rcombiner)) =
-      $splitloop($(esc(makestatic!(loop))))
-    $iter_leng = $static_length($loop_sym)
+    $(stride ? nothing : iter_len_def)
     $loop_step = $static_step($loop_sym)
     $loop_offs = $static_first($loop_sym)
   end
@@ -392,6 +388,7 @@ function enclose(
         local var"##STEP##" = $(stride ? :($loop_step * Threads.nthreads()) : loop_step)
         local $loopstart = $loop_start_expr
         local $loop_stop = $loop_stop_expr
+        # $(stride ? :(@show $loopstart, $loop_stop) : nothing)
         $threadlocal_get
         @inbounds begin
           $excomb
@@ -430,7 +427,11 @@ function enclose(
   push!(q.args, batchcall)
   quote
     var"##NUM#THREADS##" = $(Threads.nthreads())
-    if var"##NUM#THREADS##" == 1
+    $(stride ? iter_len_def : nothing)
+    if (
+      stride ? :((var"##NUM#THREADS##" == 1) || (var"##NUM#THREADS##" > $iter_leng)) :
+      (var"##NUM#THREADS##" == 1)
+    )
       single_thread_result = begin
         $(esc(threadlocal_init_single)) # Initialize threadlocal storage
         $(esc(q_single))
@@ -496,11 +497,17 @@ This may be better for load balancing if iterations close to each other take a s
 `stride=false` is the default.
 """
 macro batch(ex)
-  enclose(macroexpand(__module__, ex), 0, 1, :core, (Symbol(""), :Any), false, __module__)
+  enclose(
+    macroexpand(__module__, ex),
+    1,
+    :unspecified,
+    (Symbol(""), :Any),
+    false,
+    __module__,
+  )
 end
 function interpret_kwarg(
   arg,
-  reserve_per = 0,
   minbatch = 1,
   per = :unspecified,
   threadlocal = (Symbol(""), :Any),
@@ -509,6 +516,7 @@ function interpret_kwarg(
   a = arg.args[1]
   v = arg.args[2]
   if a === :reserve
+    @warn "reserve has been deprecated"
     @assert v ≥ 0
     reserve_per = v
   elseif a === :minbatch
@@ -522,72 +530,42 @@ function interpret_kwarg(
     else
       threadlocal = (v, :Any)
     end
+  elseif a === :stride
+    stride = v::Bool
   else
     throw(ArgumentError("kwarg $(a) not recognized."))
   end
-  reserve_per, minbatch, per, threadlocal, stride
+  minbatch, per, threadlocal, stride
 end
 macro batch(arg1, ex)
-  reserve, minbatch, per, threadlocal, stride = interpret_kwarg(arg1)
-  per = per === :unspecified ? :core : per
-  enclose(
-    macroexpand(__module__, ex),
-    reserve,
-    minbatch,
-    per,
-    threadlocal,
-    stride,
-    __module__,
-  )
+  minbatch, per, threadlocal, stride = interpret_kwarg(arg1)
+  per = per === :unspecified ? (stride ? :thread : :core) : per
+  enclose(macroexpand(__module__, ex), minbatch, per, threadlocal, stride, __module__)
 end
 macro batch(arg1, arg2, ex)
-  reserve, minbatch, per, threadlocal, stride = interpret_kwarg(arg1)
-  reserve, minbatch, per, threadlocal, stride =
-    interpret_kwarg(arg2, reserve, minbatch, per, threadlocal, stride)
-  per = per === :unspecified ? :core : per
-  enclose(
-    macroexpand(__module__, ex),
-    reserve,
-    minbatch,
-    per,
-    threadlocal,
-    stride,
-    __module__,
-  )
+  minbatch, per, threadlocal, stride = interpret_kwarg(arg1)
+  minbatch, per, threadlocal, stride =
+    interpret_kwarg(arg2, minbatch, per, threadlocal, stride)
+  per = per === :unspecified ? (stride ? :thread : :core) : per
+  enclose(macroexpand(__module__, ex), minbatch, per, threadlocal, stride, __module__)
 end
 macro batch(arg1, arg2, arg3, ex)
-  reserve, minbatch, per, threadlocal, stride = interpret_kwarg(arg1)
-  reserve, minbatch, per, threadlocal, stride =
-    interpret_kwarg(arg2, reserve, minbatch, per, threadlocal, stride)
-  reserve, minbatch, per, threadlocal, stride =
-    interpret_kwarg(arg3, reserve, minbatch, per, threadlocal, stride)
-  per = per === :unspecified ? :core : per
-  enclose(
-    macroexpand(__module__, ex),
-    reserve,
-    minbatch,
-    per,
-    threadlocal,
-    stride,
-    __module__,
-  )
+  minbatch, per, threadlocal, stride = interpret_kwarg(arg1)
+  minbatch, per, threadlocal, stride =
+    interpret_kwarg(arg2, minbatch, per, threadlocal, stride)
+  minbatch, per, threadlocal, stride =
+    interpret_kwarg(arg3, minbatch, per, threadlocal, stride)
+  per = per === :unspecified ? (stride ? :thread : :core) : per
+  enclose(macroexpand(__module__, ex), minbatch, per, threadlocal, stride, __module__)
 end
 macro batch(arg1, arg2, arg3, arg4, ex)
-  reserve, minbatch, per, threadlocal, stride = interpret_kwarg(arg1)
-  reserve, minbatch, per, threadlocal, stride =
-    interpret_kwarg(arg2, reserve, minbatch, per, threadlocal, stride)
-  reserve, minbatch, per, threadlocal, stride =
-    interpret_kwarg(arg3, reserve, minbatch, per, threadlocal, stride)
-  reserve, minbatch, per, threadlocal, stride =
-    interpret_kwarg(arg3, reserve, minbatch, per, threadlocal, stride)
-  per = per === :unspecified ? :core : per
-  enclose(
-    macroexpand(__module__, ex),
-    reserve,
-    minbatch,
-    per,
-    threadlocal,
-    stride,
-    __module__,
-  )
+  minbatch, per, threadlocal, stride = interpret_kwarg(arg1)
+  minbatch, per, threadlocal, stride =
+    interpret_kwarg(arg2, minbatch, per, threadlocal, stride)
+  minbatch, per, threadlocal, stride =
+    interpret_kwarg(arg3, minbatch, per, threadlocal, stride)
+  minbatch, per, threadlocal, stride =
+    interpret_kwarg(arg3, minbatch, per, threadlocal, stride)
+  per = per === :unspecified ? (stride ? :thread : :core) : per
+  enclose(macroexpand(__module__, ex), minbatch, per, threadlocal, stride, __module__)
 end
