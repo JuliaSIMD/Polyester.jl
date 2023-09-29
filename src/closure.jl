@@ -372,7 +372,7 @@ function enclose(exorig::Expr, minbatchsize, per::Symbol, threadlocal_tuple, str
   end
   if stride
     # we are to do length(var"##SUBSTART##":var"##SUBSTOP##") iterations
-    # 
+    #
     loop_start_expr =
       :(var"##THREAD##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - var"##LOOP_STEP##")
     loop_stop_expr = :($loopstart + (var"##SUBSTOP##" - var"##SUBSTART##") * var"##STEP##")
@@ -430,7 +430,7 @@ function enclose(exorig::Expr, minbatchsize, per::Symbol, threadlocal_tuple, str
   end
   push!(q.args, batchcall)
   quote
-    var"##NUM#THREADS##" = $(Threads.nthreads())
+    var"##NUM#THREADS##" = $(Threads.nthreads)()
     $(stride ? iter_len_def : nothing)
     if (
       $(

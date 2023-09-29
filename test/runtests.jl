@@ -575,6 +575,25 @@ end
   end
 end
 
+@testset "issue #119" begin
+  # https://github.com/JuliaSIMD/Polyester.jl/issues/119
+  function find_call_to_nthreads(expr)
+    expr isa Expr || return false
+    if expr.head === :call
+      if Base.Threads.nthreads in expr.args
+        return true
+      end
+    end
+    return any(find_call_to_nthreads, expr.args)
+  end
+
+  expr = @macroexpand @batch for i in 1:100
+    a[i] = i
+  end
+
+  @test find_call_to_nthreads(expr)
+end
+
 if VERSION ≥ v"1.6"
   println("Package tests complete. Running `Aqua` checks.")
   Aqua.test_all(Polyester)
