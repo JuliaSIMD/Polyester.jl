@@ -246,5 +246,5 @@ function batch(
   args::Vararg{Any,K};
   threadlocal::Val{thread_local} = Val(false),
 ) where {F,K,thread_local}
-  batch(f!, (len, nbatches), args...; threadlocal)
+  batch(f!, threadlocal, (len, nbatches), args...)
 end
