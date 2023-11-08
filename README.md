@@ -22,8 +22,8 @@ function axpy_polyester!(y, a, x)
 end
 
 a = 3.141
-x = rand(1024)
-y = rand(1024)
+x = rand(10_000)
+y = rand(10_000)
 axpy_polyester!(y, a, x)
 ```
 
@@ -42,6 +42,12 @@ Let's consider a basic [axpy](https://en.wikipedia.org/wiki/Basic_Linear_Algebra
 ```julia
 using Polyester: @batch
 using Base.Threads: @threads
+using LinearAlgebra
+using BenchmarkTools
+
+# pinning threads for good measure
+using ThreadPinning
+pinthreads(:cores)
 
 # Single threaded.
 function axpy_serial!(y, a, x)
@@ -81,66 +87,66 @@ x = rand(10_000);
 VERSION
 ```
 
-On a 6-core machine I find the following results.
+With 8 Julia threads (pinned to different CPU-cores) I find the following results.
 
 ```julia
 julia> @benchmark axpy_serial!($y, eps(), $x)
-BenchmarkTools.Trial: 10000 samples with 9 evaluations.
- Range (min … max):  2.743 μs …  10.681 μs  ┊ GC (min … max): 0.00% … 0.00%
- Time  (median):     2.845 μs               ┊ GC (median):    0.00%
- Time  (mean ± σ):   2.872 μs ± 205.675 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
+BenchmarkTools.Trial: 10000 samples with 10 evaluations.
+ Range (min … max):  1.430 μs …  2.226 μs  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     1.434 μs              ┊ GC (median):    0.00%
+ Time  (mean ± σ):   1.438 μs ± 23.775 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
 
-         ▃▅██▇▆▄▃▁                                             
-  ▁▁▂▂▄▆██████████▇▆▅▄▄▃▃▃▃▂▂▂▂▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ ▃
-  2.74 μs         Histogram: frequency by time        3.24 μs <
+  ▂█▃                                                         
+  ███▆▆▄▂▁▂▂▁▁▂▁▁▁▁▁▂▁▂▁▁▁▁▁▁▂▂▁▁▂▁▂▁▁▁▁▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▂▂▂▂ ▂
+  1.43 μs        Histogram: frequency by time        1.55 μs <
 
  Memory estimate: 0 bytes, allocs estimate: 0.
 
 julia> @benchmark axpy_batch!($y, eps(), $x)
-BenchmarkTools.Trial: 10000 samples with 10 evaluations.
- Range (min … max):  1.859 μs …  12.354 μs  ┊ GC (min … max): 0.00% … 0.00%
- Time  (median):     1.946 μs               ┊ GC (median):    0.00%
- Time  (mean ± σ):   2.143 μs ± 626.026 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
+BenchmarkTools.Trial: 10000 samples with 69 evaluations.
+ Range (min … max):  853.623 ns …  2.361 μs  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     885.507 ns              ┊ GC (median):    0.00%
+ Time  (mean ± σ):   889.184 ns ± 25.306 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
 
-  ▅█▅▃▂▁▁               ▁▂▃▁                                  ▁
-  ██████████▇▇█▆▅▅▃▄▂▃▃▅████▆▆▅▅▅▅▄▃▄▄▅▅▄▅▅▅▄▅▃▅▅▅▆▅▄▃▃▃▄▄▄▃▄ █
-  1.86 μs      Histogram: log(frequency) by time      4.88 μs <
+              ▂▅▇██▆▆▄▁                                         
+  ▁▁▁▁▁▁▂▂▃▄▆██████████▇▅▄▃▂▂▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▂▁▁ ▃
+  854 ns          Histogram: frequency by time          968 ns <
 
  Memory estimate: 0 bytes, allocs estimate: 0.
 
 julia> @benchmark axpy_atthreads!($y, eps(), $x)
-BenchmarkTools.Trial: 10000 samples with 1 evaluation.
- Range (min … max):   5.714 μs … 172.895 μs  ┊ GC (min … max): 0.00% … 0.00%
- Time  (median):     16.372 μs               ┊ GC (median):    0.00%
- Time  (mean ± σ):   18.357 μs ±   8.686 μs  ┊ GC (mean ± σ):  0.00% ± 0.00%
+BenchmarkTools.Trial: 10000 samples with 7 evaluations.
+ Range (min … max):  4.437 μs … 388.400 μs  ┊ GC (min … max): 0.00% … 97.02%
+ Time  (median):     5.077 μs               ┊ GC (median):    0.00%
+ Time  (mean ± σ):   5.560 μs ±   9.340 μs  ┊ GC (mean ± σ):  4.03% ±  2.37%
 
-           ▅▇█▇▄▄▄▄▃▂▂▂▁▁                                      ▂
-  ▄▅▅▆▄▁▅▄▆███████████████▇▇▇▇▆▆▇▆▅▆▆▅▆▆▇▅▆▆▇▆▆▇▆▅▅▆▅▆▆▅▄▄▄▄▅▄ █
-  5.71 μs       Histogram: log(frequency) by time      59.9 μs <
+         ▁▄▅██▇▆▃▁                                             
+  ▁▁▁▂▃▅▆█████████▆▅▄▄▃▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▂▂▂▂▃▂▃▃▃▂▂▂▂▂▂▁ ▃
+  4.44 μs         Histogram: frequency by time        7.44 μs <
 
- Memory estimate: 2.91 KiB, allocs estimate: 32.
+ Memory estimate: 4.54 KiB, allocs estimate: 48.
 
 julia> @benchmark axpy_atthreads_static!($y, eps(), $x)
-BenchmarkTools.Trial: 10000 samples with 1 evaluation.
- Range (min … max):  12.196 μs … 212.525 μs  ┊ GC (min … max): 0.00% … 0.00%
- Time  (median):     29.006 μs               ┊ GC (median):    0.00%
- Time  (mean ± σ):   33.643 μs ±  12.385 μs  ┊ GC (mean ± σ):  0.00% ± 0.00%
+BenchmarkTools.Trial: 10000 samples with 8 evaluations.
+ Range (min … max):  3.078 μs … 357.969 μs  ┊ GC (min … max): 0.00% … 96.65%
+ Time  (median):     3.618 μs               ┊ GC (median):    0.00%
+ Time  (mean ± σ):   4.102 μs ±   9.118 μs  ┊ GC (mean ± σ):  5.75% ±  2.57%
 
-            ▆▆█▅▂▂▁ ▁▂▂▆▆▂▁                                    ▂
-  ▄▄▆▆▆▆▆▇█████████████████████▇█▆▇▇▆▆▇▆▆▆▅▅▅▅▄▄▅▃▅▅▄▅▄▅▄▅▄▄▅▅ █
-  12.2 μs       Histogram: log(frequency) by time      91.2 μs <
+         ▃▆█▆▅▂                                                
+  ▂▂▂▃▄▆███████▇▅▄▃▃▃▂▂▂▂▂▂▂▂▂▂▂▂▂▁▂▂▂▂▂▂▂▂▃▂▃▃▃▃▃▃▃▃▃▃▃▃▂▂▂▂ ▃
+  3.08 μs         Histogram: frequency by time        6.12 μs <
 
- Memory estimate: 3.03 KiB, allocs estimate: 36.
+ Memory estimate: 4.56 KiB, allocs estimate: 48.
 
-julia> @benchmark axpy!(eps(), $x, $y)
-BenchmarkTools.Trial: 10000 samples with 9 evaluations.
- Range (min … max):  2.759 μs …   9.360 μs  ┊ GC (min … max): 0.00% … 0.00%
- Time  (median):     2.872 μs               ┊ GC (median):    0.00%
- Time  (mean ± σ):   2.897 μs ± 170.550 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
+julia> @benchmark axpy!(eps(), $x, $y) # BLAS built-in axpy
+BenchmarkTools.Trial: 10000 samples with 10 evaluations.
+ Range (min … max):  1.438 μs …  9.397 μs  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     1.441 μs              ┊ GC (median):    0.00%
+ Time  (mean ± σ):   1.445 μs ± 83.630 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
 
-          ▁▅▇█▇▇▆▆▄▃                                           
-  ▁▁▁▂▃▄▅████████████▇▆▄▃▃▃▃▂▂▂▂▂▂▂▂▂▂▂▂▂▁▂▂▁▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ ▃
-  2.76 μs         Histogram: frequency by time        3.23 μs <
+   █                                                          
+  ▄██▅▆▂▂▁▁▂▁▁▂▁▁▁▁▁▂▂▁▁▁▂▁▁▂▁▁▁▁▁▁▁▂▂▁▁▁▁▂▂▁▂▂▁▁▁▁▁▁▁▁▂▂▂▂▂ ▂
+  1.44 μs        Histogram: frequency by time        1.55 μs <
 
  Memory estimate: 0 bytes, allocs estimate: 0.
 
@@ -148,263 +154,50 @@ julia> VERSION
 v"1.9.3"
 ```
 
-With only `10_000` elements, this simple AXPY computation can't afford the overhead of multithreading via `@threads` (for either scheduling scheme). In fact, the latter just slows the computation down. Similarly, the built-in BLAS `axpy!` doesn't provide any multithreading speedup (it likely falls back to a serial variant). Only with Polyester's `@batch`, which has minimal overhead, do we decent(!) speedup.
+With only `10_000` elements, this simple AXPY computation can't afford the overhead of multithreading via `@threads` (for either scheduling scheme). In fact, the latter just slows the computation down. Similarly, the built-in BLAS `axpy!` doesn't provide any multithreading speedup (it likely falls back to a serial variant). Only with Polyester's `@batch`, which has minimal overhead, do we get a decent(!) speedup.
 
 ## Keyword options for `@batch`
 
 ### `per=cores` / `per=threads`
 
+The `per` keyword argument can be used to limit the number of Julia threads to be used by a `@batch` block. Specifically, `per=core` will use only `max(num_cores, nthreads())` many of the Julia threads.
+
+Note that `@batch` defaults to `per=cores`. This is because [LoopVectorization.jl](https://github.com/JuliaSIMD/LoopVectorization.jl) currently only uses up to 1 thread per physical core, and switching the number of
+threads incurs some overhead.
+
+### `minbatch`
+
+The `minbatch` argument lets us choose a minimum number of iterations per thread. That is, `minbatch=n` means it'll use at most `number_loop_iterations ÷ n` threads.
+
+For our benchmark example above with 10000 iterations, setting `minbatch=2500` will lead to `@batch` using only 4 (of 8) threads. This is still faster than the serial version but slower than plain `@batch`, which uses all 8 available threads.
+
 ```julia
-# One Polyester task "per CPU-core" (default)
-function axpy_per_core!(y, a, x)
-    @batch per=core for i in eachindex(y,x)
-        y[i] = muladd(a, x[i], y[i])
+function axpy_minbatch!(y, a, x)
+    @batch minbatch=2500 for i in eachindex(y,x)
+        @inbounds y[i] = a * x[i] + y[i]
     end
 end
 
-# One Polyester task "per CPU-thread"
-function axpy_per_thread!(y, a, x)
-    @batch per=thread for i in eachindex(y,x)
-        y[i] = muladd(a, x[i], y[i])
-    end
-end
-
-y = rand(10_000);
-x = rand(10_000);
-@benchmark axpy_per_core!($y, eps(), $x)
-@benchmark axpy_per_thread!($y, eps(), $x)
-VERSION
+@benchmark axpy_minbatch!($y, $eps(), $x)
 ```
 
-Exemplatory results with 6 Julia threads:
-
 ```julia
-julia> @benchmark axpy_per_core!($y, eps(), $x)
+julia> @benchmark axpy_minbatch!($y, $eps(), $x)
 BenchmarkTools.Trial: 10000 samples with 10 evaluations.
- Range (min … max):  1.572 μs …  22.768 μs  ┊ GC (min … max): 0.00% … 0.00%
- Time  (median):     1.829 μs               ┊ GC (median):    0.00%
- Time  (mean ± σ):   2.053 μs ± 669.372 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
+ Range (min … max):  1.072 μs …  5.085 μs  ┊ GC (min … max): 0.00% … 0.00%
+ Time  (median):     1.114 μs              ┊ GC (median):    0.00%
+ Time  (mean ± σ):   1.126 μs ± 72.510 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
 
-   █                                                           
-  ▃██▇▂▁▁▁▂▆▄▃▃▃▂▂▁▂▃▆▃▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ ▂
-  1.57 μs         Histogram: frequency by time        4.54 μs <
-
- Memory estimate: 0 bytes, allocs estimate: 0.
-
-julia> @benchmark axpy_per_thread!($y, eps(), $x)
-BenchmarkTools.Trial: 10000 samples with 10 evaluations.
- Range (min … max):  1.574 μs …  14.175 μs  ┊ GC (min … max): 0.00% … 0.00%
- Time  (median):     1.678 μs               ┊ GC (median):    0.00%
- Time  (mean ± σ):   1.856 μs ± 526.368 ns  ┊ GC (mean ± σ):  0.00% ± 0.00%
-
-  ▄██▆▃     ▁▂▃▄▁      ▁▃▃▂▁                                  ▂
-  █████████▇█████▇▆▆▅▄▇█████▅▇▆▆▆▅▄▃▃▄▄▄▄▃▅▄▄▄▄▅▅▄▅▅▆▄▅▅▅▄▄▄▄ █
-  1.57 μs      Histogram: log(frequency) by time      4.09 μs <
+       ▂▅██▅▃                                                 
+  ▁▁▂▃▆███████▅▃▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ ▂
+  1.07 μs        Histogram: frequency by time        1.36 μs <
 
  Memory estimate: 0 bytes, allocs estimate: 0.
 ```
-
-### `minibatch`
-
-The `minbatch` argument lets us choose a minimum number of iterations per thread. That is, `minbatch=n` means it'll use at most `number_loop_iterations ÷ n` threads. Setting `minbatch=2000` like we did above means that with only 4000 iterations, `@batch`
-will use just 2 threads; with 3999 iterations, it'll only only 1.
-This lets us control the pace with which it ramps up threads. By using only 2 threads with 4000 iterations, it is still much faster
-than the serial version, while using 4 threads (`per=core`) it is only slightly faster, and the full 8 (`per=thread`) matches serial.
-```julia
-julia> x = rand(4_000); y = rand(4_000);
-
-julia> @benchmark axpy_serial!($y, eps(), $x)
-samples: 10000; evals/sample: 196; memory estimate: 0 bytes; allocs estimate: 0
-ns
-
- (477.0 - 484.0]  ██████1379
- (484.0 - 491.0]  ██████████████████████████████ 6931
- (491.0 - 499.0]  ████▍1004
- (499.0 - 506.0]  ▍71
- (506.0 - 513.0]  ▏28
- (513.0 - 520.0]  ▎47
- (520.0 - 528.0]  ▎45
- (528.0 - 535.0]  ▏20
- (535.0 - 542.0]  ██443
- (542.0 - 549.0]  ▏15
- (549.0 - 557.0]  ▏3
- (557.0 - 564.0]   0
- (564.0 - 571.0]   0
- (571.0 - 578.0]  ▏3
- (578.0 - 858.0]  ▏11
-
-                  Counts
-
-min: 476.867 ns (0.00% GC); mean: 490.402 ns (0.00% GC); median: 488.444 ns (0.00% GC); max: 858.056 ns (0.00% GC).
-
-julia> @benchmark axpy_minbatch!($y, eps(), $x)
-samples: 10000; evals/sample: 276; memory estimate: 0 bytes; allocs estimate: 0
-ns
-
- (287.0 - 297.0]  ██████████████████▌2510
- (297.0 - 306.0]  ██████████████████████████████ 4088
- (306.0 - 316.0]  ███████████████████████▋3205
- (316.0 - 325.0]  █▎158
- (325.0 - 335.0]  ▎24
- (335.0 - 344.0]   0
- (344.0 - 354.0]  ▏1
- (354.0 - 364.0]   0
- (364.0 - 373.0]   0
- (373.0 - 383.0]   0
- (383.0 - 392.0]   0
- (392.0 - 402.0]   0
- (402.0 - 411.0]  ▏1
- (411.0 - 421.0]  ▏2
- (421.0 - 689.0]  ▏11
-
-                  Counts
-
-min: 286.938 ns (0.00% GC); mean: 302.339 ns (0.00% GC); median: 299.721 ns (0.00% GC); max: 689.467 ns (0.00% GC).
-
-julia> @benchmark axpy_per_core!($y, eps(), $x)
-samples: 10000; evals/sample: 213; memory estimate: 0 bytes; allocs estimate: 0
-ns
-
- (344.0 - 351.0]  █▋325
- (351.0 - 359.0]  ██████████████████████████████ 6026
- (359.0 - 366.0]  ████████████████▏3229
- (366.0 - 373.0]  █▋321
- (373.0 - 381.0]  ▍55
- (381.0 - 388.0]  ▏12
- (388.0 - 396.0]  ▏7
- (396.0 - 403.0]  ▏6
- (403.0 - 410.0]  ▏1
- (410.0 - 418.0]   0
- (418.0 - 425.0]   0
- (425.0 - 433.0]  ▏1
- (433.0 - 440.0]  ▏5
- (440.0 - 447.0]  ▏1
- (447.0 - 795.0]  ▏11
-
-                  Counts
-
-min: 343.770 ns (0.00% GC); mean: 357.972 ns (0.00% GC); median: 357.270 ns (0.00% GC); max: 794.709 ns (0.00% GC).
-
-julia> @benchmark axpy_per_thread!($y, eps(), $x)
-samples: 10000; evals/sample: 195; memory estimate: 0 bytes; allocs estimate: 0
-ns
-
- (476.0 - 487.0 ]  ██████████████████████████████▏7273
- (487.0 - 499.0 ]  ██████████▉2625
- (499.0 - 510.0 ]  ▎48
- (510.0 - 522.0 ]  ▏15
- (522.0 - 533.0 ]  ▏6
- (533.0 - 545.0 ]  ▏2
- (545.0 - 557.0 ]  ▏5
- (557.0 - 568.0 ]  ▏5
- (568.0 - 580.0 ]  ▏3
- (580.0 - 591.0 ]  ▏2
- (591.0 - 603.0 ]   0
- (603.0 - 614.0 ]   0
- (614.0 - 626.0 ]  ▏3
- (626.0 - 638.0 ]  ▏2
- (638.0 - 2489.0]  ▏11
-
-                  Counts
-
-min: 475.564 ns (0.00% GC); mean: 486.650 ns (0.00% GC); median: 485.287 ns (0.00% GC); max: 2.489 μs (0.00% GC).
-```
-Seeing that we still see a substantial improvement with 2 threads for vectors of length 4000, we may thus expect to still see
-improvement for vectors of length 3000, and could thus try `minbatch=1_500`. That'd also ensure we're still using just 2 threads
-for vectos of length 4000.
-However, performance with respect to size tends to have a lot discontinuities.
-```julia
-julia> function axpy_minbatch_1500!(y, a, x)
-           @batch minbatch=1_500 for i in eachindex(y,x)
-               y[i] = muladd(a, x[i], y[i])
-           end
-       end
-axpy_minbatch_1500! (generic function with 1 method)
-
-julia> x = rand(3_000); y = rand(3_000);
-
-julia> @benchmark axpy_serial!($y, eps(), $x)
-samples: 10000; evals/sample: 839; memory estimate: 0 bytes; allocs estimate: 0
-ns
-
- (145.3 - 151.6]  ██████████████████████████████9289
- (151.6 - 157.9]  ▌133
- (157.9 - 164.3]  █▋484
- (164.3 - 170.6]  ▏14
- (170.6 - 176.9]   0
- (176.9 - 183.3]  ▏2
- (183.3 - 189.6]  ▏9
- (189.6 - 195.9]  ▏6
- (195.9 - 202.2]  ▏6
- (202.2 - 208.6]  ▏5
- (208.6 - 214.9]  ▏4
- (214.9 - 221.2]  ▏9
- (221.2 - 227.6]  ▏14
- (227.6 - 233.9]  ▏14
- (233.9 - 260.2]  ▏11
-
-                  Counts
-
-min: 145.273 ns (0.00% GC); mean: 148.314 ns (0.00% GC); median: 145.881 ns (0.00% GC); max: 260.150 ns (0.00% GC).
-
-julia> @benchmark axpy_minbatch!($y, eps(), $x)
-samples: 10000; evals/sample: 807; memory estimate: 0 bytes; allocs estimate: 0
-ns
-
- (148.6 - 153.6]  ██████████████████████████████ 8937
- (153.6 - 158.7]  ██▍674
- (158.7 - 163.8]  █292
- (163.8 - 168.9]  ▎71
- (168.9 - 174.0]  ▏4
- (174.0 - 179.0]  ▏3
- (179.0 - 184.1]   0
- (184.1 - 189.2]   0
- (189.2 - 194.3]   0
- (194.3 - 199.3]   0
- (199.3 - 204.4]   0
- (204.4 - 209.5]  ▏1
- (209.5 - 214.6]   0
- (214.6 - 219.6]  ▏7
- (219.6 - 742.4]  ▏11
-
-                  Counts
-
-min: 148.572 ns (0.00% GC); mean: 152.167 ns (0.00% GC); median: 152.376 ns (0.00% GC); max: 742.447 ns (0.00% GC).
-
-julia> @benchmark axpy_minbatch_1500!($y, eps(), $x)
-samples: 10000; evals/sample: 233; memory estimate: 0 bytes; allocs estimate: 0
-ns
-
- (317.7 - 323.9]  ▍43
- (323.9 - 330.2]  ████▉591
- (330.2 - 336.4]  ████████████████████▉2538
- (336.4 - 342.6]  ██████████████████████████████3669
- (342.6 - 348.8]  ██████████████████▉2299
- (348.8 - 355.0]  █████▌667
- (355.0 - 361.2]  █▏129
- (361.2 - 367.4]  ▎21
- (367.4 - 373.6]  ▏13
- (373.6 - 379.8]  ▏5
- (379.8 - 386.0]  ▏2
- (386.0 - 392.2]  ▏2
- (392.2 - 398.4]  ▏5
- (398.4 - 404.6]  ▏5
- (404.6 - 791.4]  ▏11
-
-                  Counts
-
-min: 317.738 ns (0.00% GC); mean: 339.868 ns (0.00% GC); median: 339.279 ns (0.00% GC); max: 791.361 ns (0.00% GC).
-```
-By reducing the length of the vectors by just 1/3 (4000 -> 3000), we saw over a 3.5x speedup in the serial version.
-`minbatch=2000`, by also using only a single thread was able to match its performance. Thus, something around
-`minbatch=2000` seems like the best choice for this particular function on this particular CPU.
-
-
-Note that `@batch` defaults to using up to one thread per physical core, instead of 1 thread per CPU thread. This
-is because [LoopVectorization.jl](https://github.com/JuliaSIMD/LoopVectorization.jl) currently only uses up to 1 thread per physical core, and switching the number of
-threads incurs some overhead. See the docstring on `@batch` (i.e., `?@batch` in a Julia REPL) for some more discussion.
 
 ### Local per-thread storage (`threadlocal`)
+
+**Warning: this feature is likely broken!**
 
 You also can define local storage for each thread, providing a vector containing each of the local storages at the end.
 
@@ -472,42 +265,42 @@ end
 y = rand(10000000,4);
 x = rand(size(y)...);
 
-@btime inner($x,$y,1) # 73.319 ms (0 allocations: 0 bytes)
-@btime inner_polyester($x,$y,1) # 8.936 ms (0 allocations: 0 bytes)
-@btime inner_thread($x,$y,1) # 11.206 ms (49 allocations: 4.56 KiB)
+@btime inner($x,$y,1) # 57.456 ms (0 allocations: 0 bytes)
+@btime inner_polyester($x,$y,1) # 7.456 ms (0 allocations: 0 bytes)
+@btime inner_thread($x,$y,1) # 7.286 ms (49 allocations: 4.56 KiB)
 
-@btime sequential_sequential($x,$y) # 274.926 ms (0 allocations: 0 bytes)
-@btime sequential_polyester($x,$y) # 36.963 ms (0 allocations: 0 bytes)
-@btime sequential_thread($x,$y) # 49.373 ms (196 allocations: 18.25 KiB)
+@btime sequential_sequential($x,$y) # 229.513 ms (0 allocations: 0 bytes)
+@btime sequential_polyester($x,$y) # 29.921 ms (0 allocations: 0 bytes)
+@btime sequential_thread($x,$y) # 29.343 ms (196 allocations: 18.25 KiB)
 
-@btime threads_of_polyester($x,$y) # 78.828 ms (58 allocations: 4.84 KiB)
+@btime threads_of_polyester($x,$y) # 29.961 ms (42 allocations: 4.34 KiB)
 # the following is a purposefully suboptimal way to disable threads
-@btime threads_of_polyester_inner_disable($x,$y) # 70.182 ms (47 allocations: 4.50 KiB)
+@btime threads_of_polyester_inner_disable($x,$y) # 55.397 ms (51 allocations: 4.62 KiB)
 # the following is a good way to disable threads (the disable call happening once in the outer scope)
-@btime Polyester.disable_polyester_threads() do; threads_of_polyester($x,$y) end; # 71.141 ms (47 allocations: 4.50 KiB)
-@btime threads_of_sequential($x,$y) # 70.857 ms (46 allocations: 4.47 KiB)
-@btime threads_of_thread($x,$y) # 45.116 ms (219 allocations: 22.00 KiB)
+@btime Polyester.disable_polyester_threads() do; threads_of_polyester($x,$y) end; # 55.396 ms (47 allocations: 4.50 KiB)
+@btime threads_of_sequential($x,$y) # 55.404 ms (48 allocations: 4.53 KiB)
+@btime threads_of_thread($x,$y) # 29.187 ms (220 allocations: 22.03 KiB)
 
 # Small inner problem, repeated many times
 
 y = rand(1000,1000);
 x = rand(size(y)...);
 
-@btime inner($x,$y,1) # 7.028 μs (0 allocations: 0 bytes)
-@btime inner_polyester($x,$y,1) # 1.917 μs (0 allocations: 0 bytes)
-@btime inner_thread($x,$y,1) # 7.544 μs (45 allocations: 4.44 KiB)
+@btime inner($x,$y,1) # 3.390 μs (0 allocations: 0 bytes)
+@btime inner_polyester($x,$y,1) # 785.714 ns (0 allocations: 0 bytes)
+@btime inner_thread($x,$y,1) # 4.043 μs (48 allocations: 4.54 KiB)
 
-@btime sequential_sequential($x,$y) # 6.790 ms (0 allocations: 0 bytes)
-@btime sequential_polyester($x,$y) # 2.070 ms (0 allocations: 0 bytes)
-@btime sequential_thread($x,$y) # 9.296 ms (49002 allocations: 4.46 MiB)
+@btime sequential_sequential($x,$y) # 5.720 ms (0 allocations: 0 bytes)
+@btime sequential_polyester($x,$y) # 1.143 ms (0 allocations: 0 bytes)
+@btime sequential_thread($x,$y) # 4.796 ms (50307 allocations: 4.50 MiB)
 
-@btime threads_of_polyester($x,$y) # 2.090 ms (42 allocations: 4.34 KiB)
+@btime threads_of_polyester($x,$y) # 1.165 ms (42 allocations: 4.34 KiB)
 # the following is a purposefully suboptimal way to disable threads
-@btime threads_of_polyester_inner_disable($x,$y) # 1.065 ms (42 allocations: 4.34 KiB)
+@btime threads_of_polyester_inner_disable($x,$y) # 779.713 μs (1042 allocations: 35.59 KiB)
 # the following is a good way to disable threads (the disable call happening once in the outer scope)
-@btime Polyester.disable_polyester_threads() do; threads_of_polyester($x,$y) end; # 997.918 μs (49 allocations: 4.56 KiB)
-@btime threads_of_sequential($x,$y) # 1.057 ms (48 allocations: 4.53 KiB)
-@btime threads_of_thread($x,$y) # 4.105 ms (42059 allocations: 4.25 MiB)
+@btime Polyester.disable_polyester_threads() do; threads_of_polyester($x,$y) end; # 743.813 μs (48 allocations: 4.53 KiB)
+@btime threads_of_sequential($x,$y) # 694.463 μs (45 allocations: 4.44 KiB)
+@btime threads_of_thread($x,$y) # 2.288 ms (42058 allocations: 4.25 MiB)
 
 # The tested functions
 # All of these would be better implemented by just using @tturbo,
@@ -587,17 +380,18 @@ end
 ```
 Benchmarks executed on:
 ```
-Julia Version 1.9.0-DEV.998
-Commit e1739aa42a1 (2022-07-18 10:27 UTC)
+Julia Version 1.9.3
+Commit bed2cd540a1 (2023-08-24 14:43 UTC)
+Build Info:
+  Official https://julialang.org/ release
 Platform Info:
   OS: Linux (x86_64-linux-gnu)
-  CPU: 16 × AMD Ryzen 7 1700 Eight-Core Processor
+  CPU: 128 × AMD EPYC 7V13 64-Core Processor
   WORD_SIZE: 64
   LIBM: libopenlibm
-  LLVM: libLLVM-14.0.5 (ORCJIT, znver1)
-  Threads: 8 on 16 virtual cores
+  LLVM: libLLVM-14.0.6 (ORCJIT, znver3)
+  Threads: 8 on 128 virtual cores
 Environment:
-  JULIA_EDITOR = code
   JULIA_NUM_THREADS = 8
 ```
 </details>
