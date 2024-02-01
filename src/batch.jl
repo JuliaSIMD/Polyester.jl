@@ -159,7 +159,7 @@ end
     Ndp = Nd + one(Nd)
   end
   launch_quote = if thread_local
-    :(launch_batched_thread!(cfunc, closure_obj, tid, argtup, start, stop, i % UInt))
+    :(launch_batched_thread!(cfunc, closure_obj, tid, argtup, start, stop, tid % UInt))
   else
     :(launch_batched_thread!(cfunc, closure_obj, tid, argtup, start, stop))
   end
