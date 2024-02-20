@@ -197,8 +197,6 @@ BenchmarkTools.Trial: 10000 samples with 10 evaluations.
 
 ### Local per-thread storage (`threadlocal`)
 
-**Warning: this feature is likely broken!**
-
 You also can define local storage for each thread, providing a vector containing each of the local storages at the end.
 
 ```julia
@@ -232,6 +230,23 @@ julia> let
        end
 
 Float16[83.0, 90.0, 27.0, 65.0]
+```
+
+## `reduction`
+The `reduction` keyword enables reduction of an already initialized `isbits` variable with certain supported associative operations (see [docs](https://JuliaSIMD.github.io/Polyester.jl/stable)), such that the transition from serialized code is as simple as adding the `@batch` macro.
+
+```julia
+julia> let
+           y1 = 0
+           y2 = 1
+           @batch reduction=((+, y1), (*, y2)) for i in 1:9
+               y1 += i
+               y2 *= i
+           end
+           println(y1, y2)
+       end
+
+45, 362880
 ```
 
 ## Disabling Polyester threads

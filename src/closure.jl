@@ -527,9 +527,11 @@ Perform OpenMP-esque reduction on the `isbits` variables `var1`, `var2`, `...` u
 operations `op1`, `op2`, `...` . The variables have to be initialized before the loop and
 cannot be a fieldname like `x.y` or `x[i]`.
 Supported operations are `+`, `*`, `min`, `max`, `&`, and `|`. The type does not have
-to be provided, since it is already inferred from the initialized variables.
+to be provided, since it is already inferred from the initialized variables---caution has
+to be taken to ensure that the type remains consistent throughout the loop.
 While `threadlocal` can do the same thing, `reduction` does not incur additional allocations
-and is generally more efficient for its purpose.
+and is generally more efficient for its purpose. It is up to the user to ensure that there
+are no data dependencies between iterations, which could lead to incorrect results.
 
     @batch per=core for i in Iter; ...; end
     @batch per=thread for i in Iter; ...; end
