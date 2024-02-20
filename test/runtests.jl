@@ -297,7 +297,7 @@ Base.eachindex(e::Iterators.Enumerate{LazyTree{T}}) where {T} = eachindex(e.itr)
   evt = 5
 end
 
-@testset "local thread storate" begin
+@testset "threadlocal storage" begin
   local1 = let
     @batch threadlocal = 0 for i = 0:9
       threadlocal += 1
@@ -374,6 +374,116 @@ end
   allocated(f::F) where {F} = @allocated f()
   allocated(f)
   @test allocated(f) < 300 + 40 * Threads.nthreads()
+end
+
+@testset "reduction" begin
+  local1 = let
+    red = 0
+    @batch reduction = (+, red) for i = 0:9
+      red += 1
+    end
+    red
+  end
+  local2 = let
+    red = 0
+    @batch minbatch = 5 reduction = (+, red) for i = 0:9
+      red += 1
+    end
+    red
+  end
+  local3 = let
+    red = 0
+    @batch per = core reduction = (+, red) for i = 0:9
+      red += 1
+    end
+    red
+  end
+  local4 = let
+    red = 0
+    @batch per = core minbatch = 100 reduction = (+, red) for i = 0:9
+      red += 1
+    end
+    red
+  end
+  local5 = let
+    red = 0
+    @batch minbatch = 100 stride = true reduction = (+, red) for i = 0:9
+      red += 1
+    end
+    red
+  end
+  myinitA() = 0
+  local6 = let
+    red = myinitA()
+    @batch reduction = (+, red) for i = 0:9
+      red += 1
+    end
+    red
+  end
+  local7, local8 = let
+    red = 0
+    @batch minbatch = 100 stride = true reduction = (+,red) threadlocal = red for i = 0:9
+      red += 1
+      threadlocal += 1
+    end
+    red, threadlocal[1]
+  end
+  @test local1 == local2 == local3 == local4 == local5 == local6 == local7 == local8
+  # check different operations
+  local9 = let
+    red = 1.0
+    @batch reduction = (*,red) for i = 1:100
+      red *= 4i^2 / (4i^2 - 1)
+    end
+    2red
+  end
+  @test local9 ≈ 2prod(4i^2 / (4i^2 - 1) for i = 1:100)
+  # multiple reductions
+  local10, local11, local12 = let
+    red1 = 0
+    red2 = 0
+    red3 = 0
+    @batch reduction = ((+,red1), (+,red2), (+,red3)) for i = 0:9
+      red1 += 1
+      red2 += 1
+      red3 -= 1
+    end
+    red1, red2, red3
+  end
+  @test local10 == local11 == -local12
+  # # check that each thread has a separate init
+  # myvar = 0
+  # myinitC() = myvar += 1
+  # inits = let
+  #   threadlocal = myinitC()
+  #   @batch reduction = (+,threadlocal) for i = 0:9
+  #     threadlocal += 1
+  #   end
+  #   threadlocal
+  # end
+  # @test length(inits) == 1 || inits[1] != inits[end] # this test has a race condition and can (rarely) fail
+  # check that types are respected
+  myinitD() = Float16(1.0)
+  settingtype = let
+    threadlocal = myinitD()
+    @batch reduction = (+,threadlocal) for i = 0:9
+      threadlocal += 1
+    end
+    threadlocal
+  end
+  @test eltype(settingtype) == Float16
+  # check for excessive allocations
+  function f()
+    n = 1000
+    threadlocal = 1.0
+    @batch minbatch = 10 reduction = (+,threadlocal) for i = 1:n
+      threadlocal += 1.0 / threadlocal
+    end
+    return threadlocal
+  end
+  allocated(f::F) where {F} = @allocated f()
+  allocated(f)
+  @test allocated(f) == 0
 end
 
 @testset "locks and refvalues" begin
