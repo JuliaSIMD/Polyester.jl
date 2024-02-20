@@ -232,7 +232,7 @@ julia> let
 Float16[83.0, 90.0, 27.0, 65.0]
 ```
 
-## `reduction`
+### `reduction`
 The `reduction` keyword enables reduction of an already initialized `isbits` variable with certain supported associative operations (see [docs](https://JuliaSIMD.github.io/Polyester.jl/stable)), such that the transition from serialized code is as simple as adding the `@batch` macro.
 
 ```julia
