@@ -373,7 +373,7 @@ function enclose(exorig::Expr, minbatchsize, per, threadlocal, reduction, stride
     :($(esc(threadlocal_var)) = multi_thread_result)
   threadlocal_get =
     threadlocal_val === Symbol("") ? donothing :
-    :($threadlocal_var_gen = $threadlocal_val::$threadlocal_type)
+    :($threadlocal_var_gen::$threadlocal_type = $threadlocal_val)
   threadlocal_set =
     threadlocal_val === Symbol("") ? donothing :
     :($threadlocal_accum[var"##THREAD##"] = $threadlocal_var_gen)
