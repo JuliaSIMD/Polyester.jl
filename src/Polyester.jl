@@ -8,7 +8,7 @@ import StaticArrayInterface
 const ArrayInterface = StaticArrayInterface
 using Base.Cartesian: @nexprs
 using StaticArrayInterface: static_length, static_step, static_first, static_size
-using StrideArraysCore: StrideArray, object_and_preserve
+using StrideArraysCore: object_and_preserve
 using ManualMemory: Reference
 using Static
 using Requires
