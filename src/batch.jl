@@ -193,9 +193,9 @@ end
   )
   launch_quote = if S
     if C === 0
-      :(launch_batched_thread!(cfunc, tid, argtup, start, stop, i % UInt))
+      :(launch_batched_thread!(cfunc, tid, argtup, start, stop, tid % UInt))
     else
-      :(launch_batched_thread!(cfunc, tid, argtup, start, stop, i % UInt, reducinits))
+      :(launch_batched_thread!(cfunc, tid, argtup, start, stop, tid % UInt, reducinits))
     end
   else
     if C === 0

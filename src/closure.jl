@@ -388,7 +388,7 @@ function enclose(exorig::Expr, minbatchsize, per, threadlocal, reduction, stride
   for i in eachindex(reduction_var)
     op = getfield(Polyester, reduction_op[i])
     var = esc(reduction_var[i])
-    init = :(Polyester.initializer($op, $var))
+    init = :(initializer($op, $var))
     push!(reduction_ops.args, op)
     push!(reduction_vars.args, var)
     push!(reduction_inits.args, init)

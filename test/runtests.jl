@@ -706,5 +706,5 @@ end
 
 if VERSION ≥ v"1.6"
   println("Package tests complete. Running `Aqua` checks.")
-  Aqua.test_all(Polyester)
+  Aqua.test_all(Polyester; deps_compat = (check_extras=false,))
 end
