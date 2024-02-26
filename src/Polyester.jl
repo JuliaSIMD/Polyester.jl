@@ -20,15 +20,13 @@ using PolyesterWeave:
   UnsignedIteratorEarlyStop,
   assume,
   disable_polyester_threads
-using CPUSummary: cache_linesize, num_cores, sys_threads
+using CPUSummary: num_cores
 
 export batch, @batch, disable_polyester_threads
 
 const SUPPORTED_REDUCE_OPS = (:+, :*, :min, :max, :&, :|)
 initializer(::typeof(+), ::T) where {T} = zero(T)
 initializer(::typeof(+), ::Bool) = zero(Int)
-initializer(::typeof(-), ::T) where {T} = zero(T)
-initializer(::typeof(-), ::Bool) = zero(Int)
 initializer(::typeof(*), ::T) where {T} = one(T)
 initializer(::typeof(min), ::T) where {T} = typemax(T)
 initializer(::typeof(max), ::T) where {T} = typemin(T)

@@ -428,7 +428,14 @@ end
     end
     red, threadlocal[1]
   end
-  @test local1 == local2 == local3 == local4 == local5 == local6 == local7 == local8
+  localsr = let # stride + reduction w/o minbatch
+    red = 0
+    @batch stride = true reduction = (+, red) for i = 0:9
+      red += 1
+    end
+    red
+  end
+  @test local1==local2==local3==local4==local5==local6==local7==local8==localsr
   # check different operations
   local9 = let
     red = 1.0
@@ -454,15 +461,33 @@ end
   # check for name interference with threadlocal (used to error on single threaded runs)
   function f()
     n = 1000
-    threadlocal = 1.0
+    threadlocal = false
     @batch minbatch = 10 reduction = (+,threadlocal) for i = 1:n
-      threadlocal += 1.0 / threadlocal
+      threadlocal += true
     end
     return threadlocal
   end
   allocated(f::F) where {F} = @allocated f()
-  allocated(f)
+  inferred(f::F) where {F} = try @inferred f(); true catch; false end
   @test allocated(f) == 0
+  @test inferred(f) == true
+  # remaining supported operations
+  arr = rand(10)
+  local13, local14, local15, local16 = let arr = arr
+    red1 = true
+    red2 = false
+    red3 = typemax(eltype(arr))
+    red4 = typemin(eltype(arr))
+    @batch reduction = ((&,red1), (|,red2), (min,red3), (max,red4)) for x in arr
+        red1 &= x > 0.5
+        red2 |= x > 0.5
+        red3 = min(red3, x)
+        red4 = max(red4, x)
+    end
+    red1, red2, red3, red4
+  end
+  @test (local13, local14, local15, local16) ==
+    (mapreduce(x->x>0.5, &, arr), mapreduce(x->x>0.5, |, arr), minimum(arr), maximum(arr))
 end
 
 @testset "locks and refvalues" begin
