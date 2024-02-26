@@ -6,6 +6,7 @@ end
 using ThreadingUtilities
 import StaticArrayInterface
 const ArrayInterface = StaticArrayInterface
+using Base.Cartesian: @nexprs
 using StaticArrayInterface: static_length, static_step, static_first, static_size
 using StrideArraysCore: object_and_preserve
 using ManualMemory: Reference
@@ -23,6 +24,15 @@ using CPUSummary: num_cores
 
 export batch, @batch, disable_polyester_threads
 
+const SUPPORTED_REDUCE_OPS = (:+, :*, :min, :max, :&, :|)
+initializer(::typeof(+), ::T) where {T} = zero(T)
+initializer(::typeof(+), ::Bool) = zero(Int)
+initializer(::typeof(*), ::T) where {T} = one(T)
+initializer(::typeof(min), ::T) where {T} = typemax(T)
+initializer(::typeof(max), ::T) where {T} = typemin(T)
+initializer(::typeof(&), ::Bool) = true
+initializer(::typeof(|), ::Bool) = false
+
 include("batch.jl")
 include("closure.jl")
 
@@ -38,10 +48,4 @@ function reset_threads!()
   foreach(ThreadingUtilities.checktask, eachindex(ThreadingUtilities.TASKS))
   return nothing
 end
-
-# y = rand(1)
-# x = rand(1)
-# @batch for i ∈ eachindex(y,x)
-#   y[i] = sin(x[i])
-# end
 end

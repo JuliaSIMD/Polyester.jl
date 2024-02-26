@@ -225,7 +225,7 @@ function makestatic!(expr)
   end
   expr
 end
-function enclose(exorig::Expr, minbatchsize, per::Symbol, threadlocal_tuple, stride, mod)
+function enclose(exorig::Expr, minbatchsize, per, threadlocal, reduction, stride, mod)
   Meta.isexpr(exorig, :for, 2) ||
     throw(ArgumentError("Expression invalid; should be a for loop."))
   ex = copy(exorig)
@@ -237,6 +237,7 @@ function enclose(exorig::Expr, minbatchsize, per::Symbol, threadlocal_tuple, str
   loop_offs = Symbol("##LOOPOFFSET##")
   innerloop = Symbol("##inner##loop##")
   rcombiner = Symbol("##split##recombined##")
+  reduction_op, reduction_var = reduction
   threadlocal_var = Symbol("threadlocal")
   #FIXME: don't do this?
   per = stride ? :thread : per
@@ -244,6 +245,12 @@ function enclose(exorig::Expr, minbatchsize, per::Symbol, threadlocal_tuple, str
   arguments = Symbol[innerloop, rcombiner]#loop_offs, loop_step]
   defined = Dict{Symbol,Symbol}(loop_offs => loop_offs, loop_step => loop_step)
   threadlocal_var_gen = getgensym!(defined, threadlocal_var)
+  reduction_var_gen = Expr(:tuple)
+  if reduction_var !== Tuple{}()
+    for i ∈ eachindex(reduction_var)
+      push!(reduction_var_gen.args, getgensym!(defined, reduction_var[i]))
+    end
+  end
   define_induction_variables!(arguments, defined, ex, mod)
   firstloop = ex.args[1]
   if firstloop.head === :block
@@ -340,39 +347,71 @@ function enclose(exorig::Expr, minbatchsize, per::Symbol, threadlocal_tuple, str
     push!(threadtup.args, :(min($il, $num_thread_expr)))
   end
   closure = Symbol("##closure##")
-  threadlocal, threadlocal_type = threadlocal_tuple
-  threadlocal_var_single = gensym(threadlocal_var)
-  q_single = symbolsubs(exorig, threadlocal_var, threadlocal_var_single)
   donothing = Expr(:block)
+  return_quote = Expr(:return)
+  # threadlocal stuff
+  threadlocal_var_single = gensym(threadlocal_var)
+  threadlocal_val, threadlocal_type = threadlocal
+  q_single = threadlocal_val === Symbol("") ? exorig :
+    symbolsubs(exorig, threadlocal_var, threadlocal_var_single)
+  # threadlocal_type = getfield(mod, threadlocal_type)
+  threadlocal_accum = Symbol("##THREADLOCAL##ACCUM##")
   threadlocal_init_single =
-    threadlocal === Symbol("") ? donothing : :($threadlocal_var_single = $threadlocal)
-  threadlocal_repack_single =
-    threadlocal === Symbol("") ? donothing : :($threadlocal_var_single)
-  threadlocal_single_store =
-    threadlocal === Symbol("") ? donothing :
+    threadlocal_val === Symbol("") ? donothing :
+    :($threadlocal_var_single = $threadlocal_val)
+  threadlocal_return_single =
+    threadlocal_val === Symbol("") ? donothing : :($threadlocal_var_single)
+  threadlocal_vect_single =
+    threadlocal_val === Symbol("") ? donothing :
     :($(esc(threadlocal_var)) = [single_thread_result])
-  threadlocal_init1 =
-    threadlocal === Symbol("") ? donothing :
-    :($threadlocal_var = Vector{$threadlocal_type}(undef, 0))
-  threadlocal_init2 =
-    threadlocal === Symbol("") ? donothing :
-    :(resize!($(esc(threadlocal_var)), max(1, $(threadtup.args[2]))))
-  threadlocal_get =
-    threadlocal === Symbol("") ? donothing :
-    :($threadlocal_var_gen = $threadlocal::$threadlocal_type)
-  threadlocal_set =
-    threadlocal === Symbol("") ? donothing :
-    :($threadlocal_var[var"##THREAD##"] = $threadlocal_var_gen)
-  push!(q.args, threadlocal_init2)
-  args = Expr(:tuple, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))
-  closure_args = if threadlocal !== Symbol("") || stride
-    :($args, var"##SUBSTART##"::Int, var"##SUBSTOP##"::Int, var"##THREAD##"::Int)
-  else
-    :($args, var"##SUBSTART##"::Int, var"##SUBSTOP##"::Int)
+  threadlocal_init =
+    threadlocal_val === Symbol("") ? donothing : quote
+    $(esc(threadlocal_accum)) =
+      Vector{$threadlocal_type}(undef, max(1, $(threadtup.args[2])))
   end
+  threadlocal_vect =
+    threadlocal_val === Symbol("") ? donothing :
+    :($(esc(threadlocal_var)) = multi_thread_result)
+  threadlocal_get =
+    threadlocal_val === Symbol("") ? donothing :
+    :($threadlocal_var_gen::$threadlocal_type = $threadlocal_val)
+  threadlocal_set =
+    threadlocal_val === Symbol("") ? donothing :
+    :($threadlocal_accum[var"##THREAD##"] = $threadlocal_var_gen)
+  threadlocal_return =
+    threadlocal_val === Symbol("") ? donothing : :($threadlocal_accum)
+  threadlocal_val !== Symbol("") && push!(q.args, threadlocal_init)
+  # reduction stuff
+  reduction_ops = Expr(:tuple)
+  reduction_vars = Expr(:tuple)
+  reduction_inits = Expr(:tuple)
+  reduction_set = Expr(:block)
+  for i in eachindex(reduction_var)
+    op = getfield(Polyester, reduction_op[i])
+    var = esc(reduction_var[i])
+    init = :(initializer($op, $var))
+    push!(reduction_ops.args, op)
+    push!(reduction_vars.args, var)
+    push!(reduction_inits.args, init)
+    push!(reduction_set.args, :($var = $op($var, reduction_final[$i])))
+  end
+  reduction_init =
+    reduction_var === Tuple{}() ? donothing :
+    :($reduction_var_gen = var"##REDUCTION##INIT##")
+  if reduction_var !== Tuple{}()
+    push!(return_quote.args, reduction_var_gen)
+  else
+    push!(return_quote.args, nothing)
+  end
+
+  args = Expr(:tuple, Symbol("##LOOPOFFSET##"), Symbol("##LOOP_STEP##"))
+  closure_args = Expr(:tuple, args, :(var"##SUBSTART##"::Int), :(var"##SUBSTOP##"::Int))
+  if threadlocal_val !== Symbol("") || stride
+    push!(closure_args.args, :(var"##THREAD##"::Int))
+  end
+  reduction_var !== Tuple{}() && push!(closure_args.args, Symbol("##REDUCTION##INIT##"))
   if stride
     # we are to do length(var"##SUBSTART##":var"##SUBSTOP##") iterations
-    #
     loop_start_expr =
       :(var"##THREAD##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - var"##LOOP_STEP##")
     loop_stop_expr = :($loopstart + (var"##SUBSTOP##" - var"##SUBSTART##") * var"##STEP##")
@@ -394,21 +433,24 @@ function enclose(exorig::Expr, minbatchsize, per::Symbol, threadlocal_tuple, str
         local $loop_stop = $loop_stop_expr
         # $(stride ? :(@show $loopstart, $loop_stop) : nothing)
         $threadlocal_get
+        $reduction_init
         @inbounds begin
           $excomb
         end
         $threadlocal_set
-        nothing
+        $return_quote
       end
     end
   end
   push!(q.args, esc(closureq))
-  batchcall = if threadlocal !== Symbol("") || stride
+  batchcall = if threadlocal_val !== Symbol("") || stride
     Expr(
       :call,
       batch,
       esc(closure),
       Val(true),
+      reduction_ops,
+      reduction_inits,
       threadtup,
       Symbol("##LOOPOFFSET##"),
       Symbol("##LOOP_STEP##"),
@@ -419,6 +461,8 @@ function enclose(exorig::Expr, minbatchsize, per::Symbol, threadlocal_tuple, str
       batch,
       esc(closure),
       Val(false),
+      reduction_ops,
+      reduction_inits,
       threadtup,
       Symbol("##LOOPOFFSET##"),
       Symbol("##LOOP_STEP##"),
@@ -427,6 +471,10 @@ function enclose(exorig::Expr, minbatchsize, per::Symbol, threadlocal_tuple, str
   for a ∈ arguments
     push!(args.args, get(defined, a, a))
     push!(batchcall.args, esc(a))
+  end
+  if threadlocal_val !== Symbol("")
+    push!(args.args, threadlocal_accum)
+    push!(batchcall.args, esc(threadlocal_accum))
   end
   push!(q.args, batchcall)
   quote
@@ -441,16 +489,18 @@ function enclose(exorig::Expr, minbatchsize, per::Symbol, threadlocal_tuple, str
       single_thread_result = begin
         $(esc(threadlocal_init_single)) # Initialize threadlocal storage
         $(esc(q_single))
-        $(esc(threadlocal_repack_single))
+        $(esc(threadlocal_return_single))
       end
-      # Put the single-thread threadlocal storage in a single-element Vector
-      $threadlocal_single_store
+      $threadlocal_vect_single
     else
-      $(esc(threadlocal_init1))
-      let
-        $q
+      multi_thread_result = let
+        reduction_final = $q
+        $reduction_set
+        $(esc(threadlocal_return))
       end
+      $threadlocal_vect
     end
+    nothing
   end
 end
 
@@ -461,16 +511,28 @@ Evaluate the loop on multiple threads.
 
     @batch minbatch=N for i in Iter; ...; end
 
-Create a thread-local storage used in the loop.
+Evaluate at least N iterations per thread. Will use at most `length(Iter) ÷ N` threads.
 
     @batch threadlocal=init() for i in Iter; ...; end
+
+Create a thread-local storage used in the loop.
 
 The `init` function will be called at the start at each thread. `threadlocal` will
 refer to storage local for the thread. At the end of the loop, a `threadlocal`
 vector containing all the thread-local values will be available. A type can be specified
 with `threadlocal=init()::Type`.
 
-Evaluate at least N iterations per thread. Will use at most `length(Iter) ÷ N` threads.
+    @batch reduction=((op1, var1), (op2, var2), ...) for i in Iter; ...; end
+
+Perform OpenMP-esque reduction on the `isbits` variables `var1`, `var2`, `...` using the
+operations `op1`, `op2`, `...` . The variables have to be initialized before the loop and
+cannot be a fieldname like `x.y` or `x[i]`.
+Supported operations are `+`, `*`, `min`, `max`, `&`, and `|`. The type does not have
+to be provided, since it is already inferred from the initialized variables---**caution has
+to be taken to ensure that the type remains consistent throughout the loop**.
+While `threadlocal` can do the same thing, `reduction` does not incur additional allocations
+and is generally more efficient for its purpose. It is up to the user to ensure that there
+are no data dependencies between iterations, which could lead to incorrect results.
 
     @batch per=core for i in Iter; ...; end
     @batch per=thread for i in Iter; ...; end
@@ -499,14 +561,17 @@ You can pass both `per=(core/thread)` and `minbatch=N` options at the same time,
 
     @batch stride=true for i in Iter; ...; end
 
-This may be better for load balancing if iterations close to each other take a similar amount of time, but iterations far apart take different lengths of time. Setting this also forces `per=thread`. The default is `stride=false`.
+This may be better for load balancing if iterations close to each other take a similar
+amount of time, but iterations far apart take different lengths of time. Setting this also
+forces `per=thread`. The default is `stride=false`.
 """
 macro batch(ex)
   enclose(
     macroexpand(__module__, ex),
     1,
     :unspecified,
-    (Symbol(""), :Any),
+    (Symbol(""), :Any), # threadlocal: var, type
+    (Tuple{}(), Tuple{}()), # reduction: ops, vars
     false,
     __module__,
   )
@@ -515,20 +580,35 @@ function interpret_kwarg(
   arg,
   minbatch = 1,
   per = :unspecified,
-  threadlocal = (Symbol(""), :Any),
+  threadlocal = (Symbol(""), :Any), # var, type
+  reduction = (Tuple{}(), Tuple{}()), # ops, vars
   stride = false,
 )
   a = arg.args[1]
   v = arg.args[2]
-  if a === :reserve
-    @warn "reserve has been deprecated"
-    @assert v ≥ 0
-    reserve_per = v
-  elseif a === :minbatch
+  if a === :minbatch
     minbatch = v
   elseif a === :per
     per = v::Symbol
     @assert (per === :core) | (per === :thread)
+  elseif a === :reduction
+    @assert Meta.isexpr(v, :tuple) && v.head == :tuple
+    if Meta.isexpr(v.args[1], :tuple, 2)
+      for red in v.args
+        @assert Meta.isexpr(red, :tuple, 2) && red.head == :tuple
+      end
+      reducops = ntuple(length(v.args)) do i
+        v.args[i].args[1]
+      end
+      @assert SUPPORTED_REDUCE_OPS ⊇ reducops "Unsupported reduction operation."
+      reducvars = ntuple(length(v.args)) do i
+        v.args[i].args[2]
+      end
+      @assert allunique(reducvars)
+      reduction = (reducops, reducvars)
+    else
+      reduction = ((v.args[1],), (v.args[2],))
+    end
   elseif a === :threadlocal
     if Meta.isexpr(v, :(::), 2) && v.head == :(::)
       threadlocal = (v.args[1], v.args[2])
@@ -540,37 +620,90 @@ function interpret_kwarg(
   else
     throw(ArgumentError("kwarg $(a) not recognized."))
   end
-  minbatch, per, threadlocal, stride
+  minbatch, per, threadlocal, reduction, stride
 end
 macro batch(arg1, ex)
-  minbatch, per, threadlocal, stride = interpret_kwarg(arg1)
+  minbatch, per, threadlocal, reduction, stride = interpret_kwarg(arg1)
   per = per === :unspecified ? (stride ? :thread : :core) : per
-  enclose(macroexpand(__module__, ex), minbatch, per, threadlocal, stride, __module__)
+  enclose(
+    macroexpand(__module__, ex),
+    minbatch,
+    per,
+    threadlocal,
+    reduction,
+    stride,
+    __module__
+  )
 end
 macro batch(arg1, arg2, ex)
-  minbatch, per, threadlocal, stride = interpret_kwarg(arg1)
-  minbatch, per, threadlocal, stride =
-    interpret_kwarg(arg2, minbatch, per, threadlocal, stride)
+  minbatch, per, threadlocal, reduction, stride = interpret_kwarg(arg1)
+  minbatch, per, threadlocal, reduction, stride =
+    interpret_kwarg(arg2, minbatch, per, threadlocal, reduction, stride)
   per = per === :unspecified ? (stride ? :thread : :core) : per
-  enclose(macroexpand(__module__, ex), minbatch, per, threadlocal, stride, __module__)
+  enclose(
+    macroexpand(__module__, ex),
+    minbatch,
+    per,
+    threadlocal,
+    reduction,
+    stride,
+    __module__
+  )
 end
 macro batch(arg1, arg2, arg3, ex)
-  minbatch, per, threadlocal, stride = interpret_kwarg(arg1)
-  minbatch, per, threadlocal, stride =
-    interpret_kwarg(arg2, minbatch, per, threadlocal, stride)
-  minbatch, per, threadlocal, stride =
-    interpret_kwarg(arg3, minbatch, per, threadlocal, stride)
+  minbatch, per, threadlocal, reduction, stride = interpret_kwarg(arg1)
+  minbatch, per, threadlocal, reduction, stride =
+    interpret_kwarg(arg2, minbatch, per, threadlocal, reduction, stride)
+  minbatch, per, threadlocal, reduction, stride =
+    interpret_kwarg(arg3, minbatch, per, threadlocal, reduction, stride)
   per = per === :unspecified ? (stride ? :thread : :core) : per
-  enclose(macroexpand(__module__, ex), minbatch, per, threadlocal, stride, __module__)
+  enclose(
+    macroexpand(__module__, ex),
+    minbatch,
+    per,
+    threadlocal,
+    reduction,
+    stride,
+    __module__
+  )
 end
 macro batch(arg1, arg2, arg3, arg4, ex)
-  minbatch, per, threadlocal, stride = interpret_kwarg(arg1)
-  minbatch, per, threadlocal, stride =
-    interpret_kwarg(arg2, minbatch, per, threadlocal, stride)
-  minbatch, per, threadlocal, stride =
-    interpret_kwarg(arg3, minbatch, per, threadlocal, stride)
-  minbatch, per, threadlocal, stride =
-    interpret_kwarg(arg3, minbatch, per, threadlocal, stride)
+  minbatch, per, threadlocal, reduction, stride = interpret_kwarg(arg1)
+  minbatch, per, threadlocal, reduction, stride =
+    interpret_kwarg(arg2, minbatch, per, threadlocal, reduction, stride)
+  minbatch, per, threadlocal, reduction, stride =
+    interpret_kwarg(arg3, minbatch, per, threadlocal, reduction, stride)
+  minbatch, per, threadlocal, reduction, stride =
+    interpret_kwarg(arg4, minbatch, per, threadlocal, reduction, stride)
   per = per === :unspecified ? (stride ? :thread : :core) : per
-  enclose(macroexpand(__module__, ex), minbatch, per, threadlocal, stride, __module__)
+  enclose(
+    macroexpand(__module__, ex),
+    minbatch,
+    per,
+    threadlocal,
+    reduction,
+    stride,
+    __module__
+  )
+end
+macro batch(arg1, arg2, arg3, arg4, arg5, ex)
+  minbatch, per, threadlocal, reduction, stride = interpret_kwarg(arg1)
+  minbatch, per, threadlocal, reduction, stride =
+    interpret_kwarg(arg2, minbatch, per, threadlocal, reduction, stride)
+  minbatch, per, threadlocal, reduction, stride =
+    interpret_kwarg(arg3, minbatch, per, threadlocal, reduction, stride)
+  minbatch, per, threadlocal, reduction, stride =
+    interpret_kwarg(arg4, minbatch, per, threadlocal, reduction, stride)
+  minbatch, per, threadlocal, reduction, stride =
+    interpret_kwarg(arg5, minbatch, per, threadlocal, reduction, stride)
+  per = per === :unspecified ? (stride ? :thread : :core) : per
+  enclose(
+    macroexpand(__module__, ex),
+    minbatch,
+    per,
+    threadlocal,
+    reduction,
+    stride,
+    __module__
+  )
 end
