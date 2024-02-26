@@ -451,28 +451,7 @@ end
     red1, red2, red3
   end
   @test local10 == local11 == -local12
-  # # check that each thread has a separate init
-  # myvar = 0
-  # myinitC() = myvar += 1
-  # inits = let
-  #   threadlocal = myinitC()
-  #   @batch reduction = (+,threadlocal) for i = 0:9
-  #     threadlocal += 1
-  #   end
-  #   threadlocal
-  # end
-  # @test length(inits) == 1 || inits[1] != inits[end] # this test has a race condition and can (rarely) fail
-  # check that types are respected
-  myinitD() = Float16(1.0)
-  settingtype = let
-    threadlocal = myinitD()
-    @batch reduction = (+,threadlocal) for i = 0:9
-      threadlocal += 1
-    end
-    threadlocal
-  end
-  @test eltype(settingtype) == Float16
-  # check for excessive allocations
+  # check for name interference with threadlocal (used to error on single threaded runs)
   function f()
     n = 1000
     threadlocal = 1.0

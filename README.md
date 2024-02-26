@@ -233,20 +233,22 @@ Float16[83.0, 90.0, 27.0, 65.0]
 ```
 
 ### `reduction`
-The `reduction` keyword enables reduction of an already initialized `isbits` variable with certain supported associative operations (see [docs](https://JuliaSIMD.github.io/Polyester.jl/stable)), such that the transition from serialized code is as simple as adding the `@batch` macro.
+The `reduction` keyword enables reduction of an already initialized `isbits` variable with certain supported associative operations (see [docs](https://JuliaSIMD.github.io/Polyester.jl/stable)), such that the transition from serialized code is as simple as adding the `@batch` macro. Contrary to `threadlocal` this does not incur any additional allocations
 
 ```julia
-julia> let
+julia> function batch_reduction()
            y1 = 0
            y2 = 1
            @batch reduction=((+, y1), (*, y2)) for i in 1:9
                y1 += i
                y2 *= i
            end
-           println(y1, y2)
+           y1, y2
        end
-
-45, 362880
+julia> batch_reduction()
+(45, 362880)
+julia> @allocated batch_reduction()
+0
 ```
 
 ## Disabling Polyester threads

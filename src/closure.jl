@@ -351,8 +351,9 @@ function enclose(exorig::Expr, minbatchsize, per, threadlocal, reduction, stride
   return_quote = Expr(:return)
   # threadlocal stuff
   threadlocal_var_single = gensym(threadlocal_var)
-  q_single = symbolsubs(exorig, threadlocal_var, threadlocal_var_single)
   threadlocal_val, threadlocal_type = threadlocal
+  q_single = threadlocal_val === Symbol("") ? exorig :
+    symbolsubs(exorig, threadlocal_var, threadlocal_var_single)
   # threadlocal_type = getfield(mod, threadlocal_type)
   threadlocal_accum = Symbol("##THREADLOCAL##ACCUM##")
   threadlocal_init_single =
