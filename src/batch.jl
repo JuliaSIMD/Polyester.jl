@@ -223,15 +223,11 @@ end
     end
   end
   ret_quote = Expr(:return)
-  if C === 0
-    push!(ret_quote.args, nothing)
-  else
-    redtup = Expr(:tuple)
-    for j in 1:C
-      push!(redtup.args, Symbol("RVAR_", j))
-    end
-    push!(ret_quote.args, redtup)
+  redtup = Expr(:tuple)
+  for j in 1:C
+    push!(redtup.args, Symbol("RVAR_", j))
   end
+  push!(ret_quote.args, redtup)
 
   block = quote
     start = zero(UInt)
