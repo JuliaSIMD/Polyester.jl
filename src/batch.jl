@@ -316,21 +316,11 @@ end
   if nthread % Int32 ≤ zero(Int32)
     @label SERIAL
     if S
-      if C === 0
-        reducres = f!(args, one(Int), ulen % Int, 1)
-        return reducres
-      else
-        reducres = f!(args, one(Int), ulen % Int, 1, reducinits)
-        return reducres
-      end
+      reducres = f!(args, one(Int), ulen % Int, 1, reducinits)
+      return reducres
     else
-      if C === 0
-        reducres = f!(args, one(Int), ulen % Int)
-        return reducres
-      else
-        reducres = f!(args, one(Int), ulen % Int, reducinits)
-        return reducres
-      end
+      reducres = f!(args, one(Int), ulen % Int, reducinits)
+      return reducres
     end
   end
   nbatch = nthread + one(nthread)
