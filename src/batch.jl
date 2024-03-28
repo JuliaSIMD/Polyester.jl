@@ -1,7 +1,7 @@
 # S is a Val{Bool} indicating whether we will need to load the thread index
 # C is a Tuple{...} containing the types of the reduction variables
 struct BatchClosure{F,A,S,C}
-    f::F
+  f::F
 end
 function (b::BatchClosure{F,A,S,C})(p::Ptr{UInt}) where {F,A,S,C}
   (offset, args) = ThreadingUtilities.load(p, A, 2 * sizeof(UInt))
@@ -130,7 +130,7 @@ end
     start,
     stop,
     i,
-    reductup
+    reductup,
   ) do p, fptr, argtup, start, stop, i, reductup
     setup_batch!(p, fptr, argtup, start, stop, i, reductup)
   end
@@ -185,12 +185,9 @@ end
     # nthread_total = sum(nthread_tuple)
     Ndp = Nd + one(Nd)
   end
-  C !== 0 && push!(
-    q.args,
-    quote
-      @nexprs $C j -> RVAR_j = reducinits[j]
-    end
-  )
+  C !== 0 && push!(q.args, quote
+    @nexprs $C j -> RVAR_j = reducinits[j]
+  end)
   launch_quote = if S
     if C === 0
       :(launch_batched_thread!(cfunc, tid, argtup, start, stop, tid % UInt))
@@ -211,11 +208,11 @@ end
   if C !== 0
     push!(
       rem_quote.args,
-      :(@nexprs $C j -> RVAR_j = reducops[j](RVAR_j, thread_results[j]))
+      :(@nexprs $C j -> RVAR_j = reducops[j](RVAR_j, thread_results[j])),
     )
   end
   update_retv = if C === 0
-      Expr(:block)
+    Expr(:block)
   else
     quote
       thread_results = load_threadlocals(tid, argtup, needtid, reducinits)
@@ -224,7 +221,7 @@ end
   end
   ret_quote = Expr(:return)
   redtup = Expr(:tuple)
-  for j in 1:C
+  for j ∈ 1:C
     push!(redtup.args, Symbol("RVAR_", j))
   end
   push!(ret_quote.args, redtup)
@@ -316,11 +313,21 @@ end
   if nthread % Int32 ≤ zero(Int32)
     @label SERIAL
     if S
-      reducres = f!(args, one(Int), ulen % Int, 1, reducinits)
-      return reducres
+      if C === 0
+        f!(args, one(Int), ulen % Int, 1)
+        return ()
+      else
+        reducres = f!(args, one(Int), ulen % Int, 1, reducinits)
+        return reducres
+      end
     else
-      reducres = f!(args, one(Int), ulen % Int, reducinits)
-      return reducres
+      if C === 0
+        f!(args, one(Int), ulen % Int)
+        return ()
+      else
+        reducres = f!(args, one(Int), ulen % Int, reducinits)
+        return reducres
+      end
     end
   end
   nbatch = nthread + one(nthread)
