@@ -112,6 +112,12 @@ function issue25_but_with_strides!(dest, x, y)
   dest
 end
 
+function issue116!(y::Vector{T}, x::Vector{T}) where {T}
+  @batch for i in 1:length(x)
+      y[i] = exp(x[i] + one(T))
+  end
+end
+
 
 @testset "Range Map" begin
 
@@ -297,6 +303,15 @@ Base.eachindex(e::Iterators.Enumerate{LazyTree{T}}) where {T} = eachindex(e.itr)
   evt = 5
 end
 
+@testset "not-specializing-on-type heuristics" begin
+  allocated(f::F, args...) where {F} = @allocated f(args...)
+  x = rand(10000)
+  y = similar(x)
+  allocated(issue116!, y, x)
+  @test y ≈ exp.(x .+ 1.0)
+  @test allocated(issue116!, y, x) == 0
+end
+
 @testset "threadlocal storage" begin
   local1 = let
     @batch threadlocal = 0 for i = 0:9
@@ -338,15 +353,13 @@ end
   end
   @test local1 == local2 == local3 == local4 == local5 == local6
   # check that each thread has a separate init
-  myvar = 0
-  myinitC() = myvar += 1
   inits = let
-    @batch threadlocal = myinitC() for i = 0:9
+    @batch threadlocal = rand() for i = 0:9
       threadlocal += 1
     end
     threadlocal
   end
-  @test length(inits) == 1 || inits[1] != inits[end] # this test has a race condition and can (rarely) fail
+  @test length(inits) == 1 || inits[1] != inits[end]
   # check that types are respected
   myinitD() = Float16(1.0)
   settingtype = let
@@ -461,14 +474,15 @@ end
   # check for name interference with threadlocal (used to error on single threaded runs)
   function f()
     n = 1000
-    threadlocal = false
+    threadlocal = 0
     @batch minbatch = 10 reduction = (+,threadlocal) for i = 1:n
-      threadlocal += true
+      threadlocal += 1
     end
     return threadlocal
   end
   allocated(f::F) where {F} = @allocated f()
   inferred(f::F) where {F} = try @inferred f(); true catch; false end
+  allocated(f)
   @test allocated(f) == 0
   @test inferred(f) == true
   # remaining supported operations

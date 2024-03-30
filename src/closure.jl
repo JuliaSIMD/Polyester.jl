@@ -207,6 +207,13 @@ Base.@propagate_inbounds combine(x::AbstractArray, I, j) =
   x[combine(CombineIndices(), I, j)]
 Base.@propagate_inbounds combine(x::AbstractArray, ::NoLoop, j) = x[j]
 
+struct WrapType{T} end
+wrap_type(@nospecialize(x)) = x
+wrap_type(::Type{T}) where {T} = WrapType{T}()
+
+unwrap_type(@nospecialize(x)) = x
+unwrap_type(::WrapType{T}) where {T} = T
+
 function makestatic!(expr)
   expr isa Expr || return expr
   for i in eachindex(expr.args)
@@ -421,9 +428,11 @@ function enclose(exorig::Expr, minbatchsize, per, threadlocal, reduction, stride
     loop_stop_expr =
       :(var"##SUBSTOP##" * var"##LOOP_STEP##" + var"##LOOPOFFSET##" - var"##LOOP_STEP##")
   end
+  unwrap_args = Expr(:block)
   closureq = quote
     $closure = let
       @inline $closure_args -> begin
+        $unwrap_args
         local var"##STEP##" = $(
           stride ?
           :($loop_step * min(Threads.nthreads()::Int, Sys.CPU_THREADS::Int)) :
@@ -470,11 +479,14 @@ function enclose(exorig::Expr, minbatchsize, per, threadlocal, reduction, stride
   end
   for a ∈ arguments
     push!(args.args, get(defined, a, a))
-    push!(batchcall.args, esc(a))
+    push!(batchcall.args, :($wrap_type($(esc(a)))))
   end
   if threadlocal_val !== Symbol("")
     push!(args.args, threadlocal_accum)
     push!(batchcall.args, esc(threadlocal_accum))
+  end
+  for a in args.args
+    push!(unwrap_args.args, :($a = $unwrap_type($a)))
   end
   push!(q.args, batchcall)
   quote
