@@ -479,7 +479,7 @@ function enclose(exorig::Expr, minbatchsize, per, threadlocal, reduction, stride
   end
   for a ∈ arguments
     push!(args.args, get(defined, a, a))
-    push!(batchcall.args, :(wrap_type($(esc(a)))))
+    push!(batchcall.args, :($wrap_type($(esc(a)))))
   end
   if threadlocal_val !== Symbol("")
     push!(args.args, threadlocal_accum)
