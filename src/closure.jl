@@ -103,7 +103,11 @@ function extractargs!(
 
   startind = 1
   if head === :call
-    startind = 2
+    if args[1] isa Symbol
+      startind = isdefined(mod, args[1]) ? 2 : 1
+    else
+      startind = 2
+    end
   elseif head === :(=)
     extractargs_equal!(arguments, defined, args, mod)
   elseif head ∈ (:inbounds, :loopinfo)#, :(->))
@@ -121,6 +125,8 @@ function extractargs!(
     extractargs!(arguments, td, args[1], mod)
     extractargs!(arguments, td, args[2], mod)
     return
+  elseif head === :generator
+    extractargs_equal!(arguments, defined, args[2].args, mod)
   elseif (head === :local) || (head === :global)
     for (i, arg) in enumerate(args)
       if Meta.isexpr(arg, :(=))
