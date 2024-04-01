@@ -15,16 +15,25 @@ extractargs!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, sym, mod) 
 #   end
 #   nothing
 # end
+
+function _symbols(args)
+  s = Vector{Symbol}(undef, length(args))
+  for i in eachindex(args, s)
+    s[i] = args[i]
+  end
+  return s
+end
+
 function define_tup!(arguments::Vector{Symbol}, defined::Dict{Symbol,Symbol}, ex::Expr, mod)
   for (i, a) ∈ enumerate(ex.args)
     if a isa Symbol
       ex.args[i] = getgensym!(defined, a)
     elseif Meta.isexpr(a, :tuple)
-      define_tup!(Symbol[a.args...], defined, a, mod)
+      define_tup!(_symbols(a.args), defined, a, mod)
     elseif Meta.isexpr(a, :ref)
       extractargs!(arguments, defined, a, mod)
     elseif Meta.isexpr(a, :parameters)
-      define_tup!(Symbol[a.args...], defined, a, mod)
+      define_tup!(_symbols(a.args), defined, a, mod)
     else
       throw("Don't know how to handle:\n $a")
     end
@@ -171,7 +180,12 @@ function extractargs!(
 end
 
 function symbolsubs(e::Expr, old::Symbol, new::Symbol)
-  return Expr(e.head, (symbolsubs(a, old, new) for a in e.args)...)
+  ex = Expr(e.head)
+  resize!(ex.args, length(e.args))
+  for i in eachindex(e.args, ex.args)
+    ex.args[i] = symbolsubs(e.args[i], old, new)
+  end
+  return ex
 end
 function symbolsubs(e::Symbol, old::Symbol, new::Symbol)
   e == old ? new : e
@@ -365,7 +379,8 @@ function enclose(exorig::Expr, minbatchsize, per, threadlocal, reduction, stride
   # threadlocal stuff
   threadlocal_var_single = gensym(threadlocal_var)
   threadlocal_val, threadlocal_type = threadlocal
-  q_single = threadlocal_val === Symbol("") ? exorig :
+  q_single =
+    threadlocal_val === Symbol("") ? exorig :
     symbolsubs(exorig, threadlocal_var, threadlocal_var_single)
   # threadlocal_type = getfield(mod, threadlocal_type)
   threadlocal_accum = Symbol("##THREADLOCAL##ACCUM##")
@@ -378,10 +393,11 @@ function enclose(exorig::Expr, minbatchsize, per, threadlocal, reduction, stride
     threadlocal_val === Symbol("") ? donothing :
     :($(esc(threadlocal_var)) = [single_thread_result])
   threadlocal_init =
-    threadlocal_val === Symbol("") ? donothing : quote
-    $(esc(threadlocal_accum)) =
-      Vector{$threadlocal_type}(undef, max(1, $(threadtup.args[2])))
-  end
+    threadlocal_val === Symbol("") ? donothing :
+    quote
+      $(esc(threadlocal_accum)) =
+        Vector{$threadlocal_type}(undef, max(1, $(threadtup.args[2])))
+    end
   threadlocal_vect =
     threadlocal_val === Symbol("") ? donothing :
     :($(esc(threadlocal_var)) = multi_thread_result)
@@ -391,8 +407,7 @@ function enclose(exorig::Expr, minbatchsize, per, threadlocal, reduction, stride
   threadlocal_set =
     threadlocal_val === Symbol("") ? donothing :
     :($threadlocal_accum[var"##THREAD##"] = $threadlocal_var_gen)
-  threadlocal_return =
-    threadlocal_val === Symbol("") ? donothing : :($threadlocal_accum)
+  threadlocal_return = threadlocal_val === Symbol("") ? donothing : :($threadlocal_accum)
   threadlocal_val !== Symbol("") && push!(q.args, threadlocal_init)
   # reduction stuff
   reduction_ops = Expr(:tuple)
@@ -650,7 +665,7 @@ macro batch(arg1, ex)
     threadlocal,
     reduction,
     stride,
-    __module__
+    __module__,
   )
 end
 macro batch(arg1, arg2, ex)
@@ -665,7 +680,7 @@ macro batch(arg1, arg2, ex)
     threadlocal,
     reduction,
     stride,
-    __module__
+    __module__,
   )
 end
 macro batch(arg1, arg2, arg3, ex)
@@ -682,7 +697,7 @@ macro batch(arg1, arg2, arg3, ex)
     threadlocal,
     reduction,
     stride,
-    __module__
+    __module__,
   )
 end
 macro batch(arg1, arg2, arg3, arg4, ex)
@@ -701,7 +716,7 @@ macro batch(arg1, arg2, arg3, arg4, ex)
     threadlocal,
     reduction,
     stride,
-    __module__
+    __module__,
   )
 end
 macro batch(arg1, arg2, arg3, arg4, arg5, ex)
@@ -722,6 +737,6 @@ macro batch(arg1, arg2, arg3, arg4, arg5, ex)
     threadlocal,
     reduction,
     stride,
-    __module__
+    __module__,
   )
 end
