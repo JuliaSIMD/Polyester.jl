@@ -112,6 +112,20 @@ function issue25_but_with_strides!(dest, x, y)
   dest
 end
 
+function issue108!(y::Vector{T1}, x::Vector{T2}) where {T1,T2}
+  @batch for i in eachindex(y)
+    y[i] = sum(x[j] for j in 2i-oneunit(i):2i)
+  end
+end
+
+function issue108_comment!(data::Vector{T}, functions) where {T}
+  @batch for i in eachindex(data)
+    for f in functions
+       data[i] += f(data[i])
+    end
+  end
+end
+
 function issue116!(y::Vector{T}, x::Vector{T}) where {T}
   @batch for i in 1:length(x)
       y[i] = exp(x[i] + one(T))
@@ -260,6 +274,24 @@ end
     x .*= 2.0
   end
   @test reduce(hcat, arrayofarrays) == (xref .*= 2)
+end
+
+@testset "Generators and looping over array of functions" begin
+  x = collect(1:12)
+  y = zeros(6)
+  issue108!(y, x)
+  @test y == [sum(x[j] for j in 2i-oneunit(i):2i) for i in 1:6]
+  
+  functions = [x -> n*x for n in 1:3]
+  data = rand(100)
+  data1 = deepcopy(data)
+  issue108_comment!(data, functions)
+  for i in eachindex(data1)
+    for f in functions
+       data1[i] += f(data1[i])
+    end
+  end
+  @test data == data1
 end
 
 println("Issue 245...")
