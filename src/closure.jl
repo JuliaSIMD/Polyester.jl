@@ -112,8 +112,9 @@ function extractargs!(
 
   startind = 1
   if head === :call
-    if args[1] isa Symbol
-      startind = isdefined(mod, args[1]) ? 2 : 1
+    arg1 = args[1]
+    if arg1 isa Symbol && (first(string(arg1)) != '.')
+      startind = isdefined(mod, arg1) ? 2 : 1
     else
       startind = 2
     end
