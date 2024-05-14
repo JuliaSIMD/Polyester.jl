@@ -219,12 +219,10 @@ end
       @nexprs $C j -> RVAR_j = reducops[j](RVAR_j, thread_results[j])
     end
   end
-  ret_quote = Expr(:return)
-  redtup = Expr(:tuple)
+  ret_quote = Expr(:tuple)
   for j ∈ 1:C
-    push!(redtup.args, Symbol("RVAR_", j))
+    push!(ret_quote.args, Symbol("RVAR_", j))
   end
-  push!(ret_quote.args, redtup)
 
   block = quote
     start = zero(UInt)
