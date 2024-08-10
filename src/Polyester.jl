@@ -11,7 +11,6 @@ using StaticArrayInterface: static_length, static_step, static_first, static_siz
 using StrideArraysCore: object_and_preserve
 using ManualMemory: Reference
 using Static
-using Requires
 using PolyesterWeave:
   PolyesterWeave,
   request_threads,
