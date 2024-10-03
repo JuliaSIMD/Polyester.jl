@@ -541,7 +541,8 @@ end
 """
     @batch for i in Iter; ...; end
 
-Evaluate the loop on multiple threads.
+Evaluate the loop on multiple threads. The execution of the loop waits for the evaluation
+of all iterations.
 
     @batch minbatch=N for i in Iter; ...; end
 
