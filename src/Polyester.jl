@@ -44,12 +44,7 @@ Resets the threads used by [Polyester.jl](https://github.com/JuliaSIMD/Polyester
 """
 function reset_threads!()
   PolyesterWeave.reset_workers!()
-  foreach(eachindex(ThreadingUtilities.TASKS)) do tid
-    t = ThreadingUtilities.TASKS[tid]
-    if istaskfailed(t)
-      ThreadingUtilities.initialize_task(tid)
-    end
-  end
+  foreach(ThreadingUtilities.reinit_task, eachindex(ThreadingUtilities.TASKS))
   return nothing
 end
 end
