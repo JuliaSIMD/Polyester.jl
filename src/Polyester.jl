@@ -19,7 +19,6 @@ using PolyesterWeave:
   UnsignedIteratorEarlyStop,
   assume,
   disable_polyester_threads
-using CPUSummary: num_cores
 
 export batch, @batch, disable_polyester_threads
 

@@ -253,6 +253,7 @@ function makestatic!(expr)
   end
   expr
 end
+num_cores() = ccall(:jl_effective_threads, Int32, ())
 function enclose(exorig::Expr, minbatchsize, per, threadlocal, reduction, stride, mod)
   Meta.isexpr(exorig, :for, 2) ||
     throw(ArgumentError("Expression invalid; should be a for loop."))
