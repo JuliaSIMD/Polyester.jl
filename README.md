@@ -10,6 +10,7 @@ Polyester.jl provides **low-overhead multithreading** in Julia. The primary API 
 
 Polyester implements static scheduling (c.f. `@threads :static`) and has minimal overhead because it manages and re-uses a dedicated set of Julia tasks. This can lead to (great) speedups compared to other multithreading variants (see [Benchmark]() below).
 
+
 ## Basic usage example
 
 ```julia
