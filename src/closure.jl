@@ -348,7 +348,7 @@ function enclose(exorig::Expr, minbatchsize, per, threadlocal, reduction, stride
   # typexpr_incomplete is missing `funcs`
   # outerloop = Symbol("##outer##")
   num_thread_expr::Union{Symbol,Expr} = if per === :core
-    Expr(:call, min, Symbol("##NUM#THREADS##"), Expr(:call, Threads.nthreads))
+    Expr(:call, min, Symbol("##NUM#THREADS##"), Threads.nthreads())
   else
     Symbol("##NUM#THREADS##")
   end
