@@ -3,14 +3,12 @@ if isdefined(Base, :Experimental) && isdefined(Base.Experimental, Symbol("@max_m
   @eval Base.Experimental.@max_methods 1
 end
 
-using ThreadingUtilities
-import StaticArrayInterface
-const ArrayInterface = StaticArrayInterface
+using ThreadingUtilities: ThreadingUtilities
 using Base.Cartesian: @nexprs
-using StaticArrayInterface: static_length, static_step, static_first, static_size
+using StaticArrayInterface: StaticArrayInterface, static_length, static_step, static_first
 using StrideArraysCore: object_and_preserve
-using ManualMemory: Reference
-using Static
+using ManualMemory: ManualMemory, Reference
+using Static: StaticInt, static
 using PolyesterWeave:
   PolyesterWeave,
   request_threads,
