@@ -261,7 +261,8 @@ end
     free_threads!(torelease_tuple)
     $ret_quote
   end
-  gcpr = Expr(:gc_preserve, block, :cfunc)
+  # argtup can be a mutable memory allocation and `batch_closure` will not gurantuee preservation
+  gcpr = Expr(:gc_preserve, block, :cfunc, :argtup)
   argt = Expr(:tuple)
   for k ∈ 1:K
     add_var!(q, argt, gcpr, args[k], :args, :gcp, k)
