@@ -1,7 +1,7 @@
 println(
   "Starting tests with $(Threads.nthreads()) threads out of `Sys.CPU_THREADS = $(Sys.CPU_THREADS)`...",
 )
-using Polyester, Aqua, ForwardDiff
+using Polyester, Aqua, ExplicitImports, ForwardDiff
 using PolyesterWeave: dynamic_thread_count # min(Sys.CPU_THREADS, Threads.nthreads())
 using Base.Threads: @threads
 using Test
@@ -784,7 +784,33 @@ let x = Vector{Float64}(undef, 2)
   @test x == fill(2.0, 2)
 end
 
-if VERSION ≥ v"1.6"
-  println("Package tests complete. Running `Aqua` checks.")
-  Aqua.test_all(Polyester; deps_compat = (check_extras = false,))
+println("Package tests complete. Running `Aqua` and `ExplicitImports` checks.")
+Aqua.test_all(Polyester; deps_compat = (check_extras = false,))
+
+@testset "ExplicitImports" begin
+  # No implicit imports (`using XY`)
+  @test ExplicitImports.check_no_implicit_imports(Polyester) === nothing
+
+  # All explicit imports (`using XY: Z`) are loaded via their owners
+  @test ExplicitImports.check_all_explicit_imports_via_owners(Polyester) === nothing
+
+  # No explicit imports (`using XY: Z`) of non-public names
+  @test_broken ExplicitImports.check_all_explicit_imports_are_public(Polyester) === nothing
+
+  # No explicit imports (`using XY: Z`) that are not used
+  @test ExplicitImports.check_no_stale_explicit_imports(
+    Polyester;
+    # This imported name is used in manual expression building
+    ignore = (:object_and_preserve,),
+  ) === nothing
+
+  # Nothing is accessed via modules other than its owner
+  @test ExplicitImports.check_all_qualified_accesses_via_owners(Polyester) === nothing
+
+  # No accesses of non-public names
+  @test_broken ExplicitImports.check_all_qualified_accesses_are_public(Polyester) ===
+               nothing
+
+  # No self-qualified accesses
+  @test ExplicitImports.check_no_self_qualified_accesses(Polyester) === nothing
 end

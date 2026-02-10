@@ -245,7 +245,7 @@ function makestatic!(expr)
       j = findfirst(==(ex), (:axes, :size, :length))
       if j !== nothing
         expr.args[i] =
-          GlobalRef(ArrayInterface, (:static_axes, :static_size, :static_length)[j])
+          GlobalRef(StaticArrayInterface, (:static_axes, :static_size, :static_length)[j])
       end
     elseif ex isa Expr
       makestatic!(ex)

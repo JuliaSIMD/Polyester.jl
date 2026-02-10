@@ -4,23 +4,23 @@ struct BatchClosure{F,A,S,C}
   f::F
 end
 function (b::BatchClosure{F,A,S,C})(p::Ptr{UInt}) where {F,A,S,C}
-  (offset, args) = ThreadingUtilities.load(p, A, 2 * sizeof(UInt))
-  (offset, start) = ThreadingUtilities.load(p, UInt, offset)
-  (offset, stop) = ThreadingUtilities.load(p, UInt, offset)
+  (offset, args) = ManualMemory.load(p, A, 2 * sizeof(UInt))
+  (offset, start) = ManualMemory.load(p, UInt, offset)
+  (offset, stop) = ManualMemory.load(p, UInt, offset)
   if C === Tuple{} && !S
     b.f(args, (start + one(UInt)) % Int, stop % Int)
   elseif C === Tuple{} && S
-    ((offset, i) = ThreadingUtilities.load(p, UInt, offset))
+    ((offset, i) = ManualMemory.load(p, UInt, offset))
     b.f(args, (start + one(UInt)) % Int, stop % Int, i % Int)
   elseif C !== Tuple{} && !S
-    ((offset, reducinits) = ThreadingUtilities.load(p, C, offset))
+    ((offset, reducinits) = ManualMemory.load(p, C, offset))
     reducres = b.f(args, (start + one(UInt)) % Int, stop % Int, reducinits)
-    ThreadingUtilities.store!(p, reducres, offset)
+    ManualMemory.store!(p, reducres, offset)
   else
-    ((offset, i) = ThreadingUtilities.load(p, UInt, offset))
-    ((offset, reducinits) = ThreadingUtilities.load(p, C, offset))
+    ((offset, i) = ManualMemory.load(p, UInt, offset))
+    ((offset, reducinits) = ManualMemory.load(p, C, offset))
     reducres = b.f(args, (start + one(UInt)) % Int, stop % Int, i % Int, reducinits)
-    ThreadingUtilities.store!(p, reducres, offset)
+    ManualMemory.store!(p, reducres, offset)
   end
   ThreadingUtilities._atomic_store!(p, ThreadingUtilities.SPIN)
   nothing
@@ -45,15 +45,15 @@ end
 
 @inline function load_threadlocals(tid, argtup::A, ::Val{S}, reductup::C) where {A,S,C}
   p = ThreadingUtilities.taskpointer(tid)
-  (offset, _) = ThreadingUtilities.load(p, UInt, sizeof(UInt))
-  (offset, _) = ThreadingUtilities.load(p, A, offset)
-  (offset, _) = ThreadingUtilities.load(p, UInt, offset)
-  (offset, _) = ThreadingUtilities.load(p, UInt, offset)
+  (offset, _) = ManualMemory.load(p, UInt, sizeof(UInt))
+  (offset, _) = ManualMemory.load(p, A, offset)
+  (offset, _) = ManualMemory.load(p, UInt, offset)
+  (offset, _) = ManualMemory.load(p, UInt, offset)
   if S
-    (offset, _) = ThreadingUtilities.load(p, UInt, offset)
+    (offset, _) = ManualMemory.load(p, UInt, offset)
   end
-  (offset, _) = ThreadingUtilities.load(p, C, offset)
-  (offset, reducvals) = ThreadingUtilities.load(p, C, offset)
+  (offset, _) = ManualMemory.load(p, C, offset)
+  (offset, reducvals) = ManualMemory.load(p, C, offset)
   return reducvals
 end
 
@@ -64,10 +64,10 @@ end
   start::UInt,
   stop::UInt,
 )
-  offset = ThreadingUtilities.store!(p, fptr, sizeof(UInt))
-  offset = ThreadingUtilities.store!(p, argtup, offset)
-  offset = ThreadingUtilities.store!(p, start, offset)
-  offset = ThreadingUtilities.store!(p, stop, offset)
+  offset = ManualMemory.store!(p, fptr, sizeof(UInt))
+  offset = ManualMemory.store!(p, argtup, offset)
+  offset = ManualMemory.store!(p, start, offset)
+  offset = ManualMemory.store!(p, stop, offset)
   nothing
 end
 @inline function setup_batch!(
@@ -78,11 +78,11 @@ end
   stop::UInt,
   i_or_reductup,
 )
-  offset = ThreadingUtilities.store!(p, fptr, sizeof(UInt))
-  offset = ThreadingUtilities.store!(p, argtup, offset)
-  offset = ThreadingUtilities.store!(p, start, offset)
-  offset = ThreadingUtilities.store!(p, stop, offset)
-  offset = ThreadingUtilities.store!(p, i_or_reductup, offset)
+  offset = ManualMemory.store!(p, fptr, sizeof(UInt))
+  offset = ManualMemory.store!(p, argtup, offset)
+  offset = ManualMemory.store!(p, start, offset)
+  offset = ManualMemory.store!(p, stop, offset)
+  offset = ManualMemory.store!(p, i_or_reductup, offset)
   nothing
 end
 @inline function setup_batch!(
@@ -94,12 +94,12 @@ end
   i::UInt,
   reductup,
 )
-  offset = ThreadingUtilities.store!(p, fptr, sizeof(UInt))
-  offset = ThreadingUtilities.store!(p, argtup, offset)
-  offset = ThreadingUtilities.store!(p, start, offset)
-  offset = ThreadingUtilities.store!(p, stop, offset)
-  offset = ThreadingUtilities.store!(p, i, offset)
-  offset = ThreadingUtilities.store!(p, reductup, offset)
+  offset = ManualMemory.store!(p, fptr, sizeof(UInt))
+  offset = ManualMemory.store!(p, argtup, offset)
+  offset = ManualMemory.store!(p, start, offset)
+  offset = ManualMemory.store!(p, stop, offset)
+  offset = ManualMemory.store!(p, i, offset)
+  offset = ManualMemory.store!(p, reductup, offset)
   nothing
 end
 @inline function launch_batched_thread!(cfunc, tid, argtup, start, stop)
